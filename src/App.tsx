@@ -126,14 +126,18 @@ export default function App() {
   const label = NAV.find((n) => n.id === view)?.label;
 
   useEffect(() => {
-    document.title = !session
-      ? `Sign in · ${brand.name}`
-      : call.status === 'incoming'
-        ? `Incoming call · ${brand.name}`
-        : isActive(call.status)
-          ? `In call · ${brand.name}`
-          : `${label} · ${brand.name}`;
-  }, [session, label, call.status]);
+    document.title = resetToken
+      ? `Reset password · ${brand.name}`
+      : verifyToken || needsVerification
+        ? `Confirm your email · ${brand.name}`
+        : !session
+          ? `Sign in · ${brand.name}`
+          : call.status === 'incoming'
+            ? `Incoming call · ${brand.name}`
+            : isActive(call.status)
+              ? `In call · ${brand.name}`
+              : `${label} · ${brand.name}`;
+  }, [resetToken, verifyToken, needsVerification, session, label, call.status]);
 
   // Warn before closing the tab mid-call.
   useEffect(() => {
@@ -147,6 +151,7 @@ export default function App() {
   if (resetToken)
     return (
       <ResetPasswordScreen
+        key={resetToken}
         token={resetToken}
         onDone={(s) => {
           setResetToken(null);
@@ -161,6 +166,9 @@ export default function App() {
   if (verifyToken)
     return (
       <VerifyEmailLink
+        // A fresh screen per link: each token is checked once, and a second link
+        // opened in this tab must not reuse the first one's result.
+        key={verifyToken}
         token={verifyToken}
         session={session}
         onContinue={(s) => {
