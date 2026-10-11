@@ -6,9 +6,10 @@ over WebRTC.
 
 ## Features
 
-- **Accounts**: sign up and sign in with email and password. Sessions last 30
-  days and renew while you use the app. You can sign out, and changing your
-  password signs out your other devices.
+- **Accounts**: sign up and sign in with email and password, or **Continue
+  with Google**. Sessions last 30 days and renew while you use the app. You can
+  sign out, and changing your password signs out your other devices. Google
+  users can add a password later.
 
 - **Real calls (WebRTC)**: audio and video go directly between the two browsers.
   A small signaling server introduces them and relays the WebRTC handshake. It
@@ -51,7 +52,8 @@ microphone without HTTPS.
 ```bash
 npm run typecheck  # app, tooling and server (strict)
 npm run lint
-npm test           # Vitest: accounts API, password hashing, signaling server,
+npm test           # Vitest: accounts API, Google sign-in (against a stand-in
+                   # Google), password hashing, signaling server,
                    # call state machine, protocol, history, branding, formatting
 npm run build      # dist/ (app) + build/ (server)
 npm run test:e2e   # two real browsers call each other (needs `npm start` running
@@ -84,7 +86,31 @@ PORT=8080 npm start            # app, accounts API (/api/auth/*) and signaling (
 | `STUN_URLS` | Google public STUN | Comma-separated STUN URLs |
 | `TURN_URL` | none | Comma-separated TURN URLs, e.g. `turn:turn.example.com:3478,turns:turn.example.com:5349` |
 | `TURN_USERNAME`, `TURN_CREDENTIAL` | none | TURN credentials |
+| `PUBLIC_URL` | from the request | The app's public origin, e.g. `https://call.example.com`; used to build the Google callback URL |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | none | Turn on "Continue with Google" (see below) |
+| `GOOGLE_REDIRECT_URI` | `PUBLIC_URL` + `/api/auth/google/callback` | Override the exact callback URL sent to Google |
 | `ALLOWED_ORIGINS` | same host only | Extra origins allowed to call the API and open the WebSocket |
+
+### Sign in with Google
+
+The button appears only when both Google variables are set.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+   create or choose a project, then go to **APIs & Services**.
+2. Under **OAuth consent screen**, choose *External*, set the app name to
+   **Add Call**, and add your support email and logo. The scopes are `openid`,
+   `email` and `profile` (no sensitive scopes, so no Google review is needed).
+3. Under **Credentials → Create credentials → OAuth client ID**, pick
+   **Web application** and add the **Authorized redirect URIs**:
+   - production: `https://<your-domain>/api/auth/google/callback`
+   - development: `http://localhost:5174/api/auth/google/callback`
+4. Copy the client ID and secret into `GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET`, and set `PUBLIC_URL` in production. For local
+   development, start `npm run dev` with the same two variables set.
+5. While the consent screen is in *Testing*, only the test users you list can
+   sign in. **Publish** it when you're ready for everyone.
+
+The secret belongs in your hosting provider's secret settings. Never commit it.
 
 Requirements for real-world use:
 
@@ -114,6 +140,16 @@ Requirements for real-world use:
 - Rate limits: 30 sign-in/sign-up attempts per IP and 10 failed sign-ins per
   account, per 15 minutes.
 - CSRF: the API accepts only JSON POSTs from the app's own origin.
+- **Google**: OpenID Connect authorization-code flow with PKCE, a `state`
+  bound to the browser by a short-lived HttpOnly cookie (blocks login CSRF and
+  replay), and a `nonce`. The ID token's RS256 signature is checked against
+  Google's published keys, along with issuer, audience, expiry and nonce. Only
+  Google accounts with a **verified email** are accepted. The client secret
+  never reaches the browser.
+- **Account linking**: a Google account is matched by its permanent Google ID.
+  The first Google sign-in with an email that already has a password account
+  links the two, because Google has verified that the person owns that email.
+  An email already linked to a *different* Google account is refused.
 
 **Calls**
 - The signaling WebSocket is authenticated from the session cookie: you can only
@@ -132,7 +168,7 @@ Requirements for real-world use:
 - Password reset and email verification. Both need an email-sending service
   (e.g. SMTP, Postmark, SES). Until then, a forgotten password must be reset
   by an operator in the database.
-- Sign-in with Google/Apple and two-factor authentication.
+- Sign in with Apple, and two-factor authentication.
 - Calls are one-to-one. Calling phone numbers would need a telephony provider
   (SIP / PSTN gateway).
 
@@ -160,6 +196,7 @@ src/
   components/, views/  UI (People, Recents, Settings, call screen, sign-in)
 server/
   auth.ts              accounts API, sessions, rate limiting (tested)
+  google.ts            Sign in with Google: OIDC + PKCE, ID-token verification (tested)
   passwords.ts         scrypt hashing (tested)
   db.ts                SQLite schema and queries
   signaling.ts         authenticated presence, invitations, SDP/ICE relay (tested)
@@ -172,7 +209,7 @@ scripts/               generate-icons.ts, e2e-call.mjs
 ## Roadmap
 
 - Password reset and email verification (needs an email provider).
-- Sign in with Google / Apple; two-factor authentication.
+- Sign in with Apple; two-factor authentication.
 - Saved contacts and server-side call history.
 - Push notifications for incoming calls when the tab is closed.
 - Group calls (needs an SFU such as LiveKit or mediasoup).

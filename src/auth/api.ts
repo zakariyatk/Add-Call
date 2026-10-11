@@ -8,6 +8,31 @@ import { brand } from '../branding/brand.config';
 export interface Session {
   email: string;
   name: string;
+  /** False for accounts created with Google that never set a password. */
+  hasPassword?: boolean;
+  /** Signed in with (or linked to) Google. */
+  google?: boolean;
+}
+
+/** Where the "Continue with Google" button sends the browser. */
+export const GOOGLE_SIGN_IN_URL = '/api/auth/google';
+
+const GOOGLE_ERRORS: Record<string, string> = {
+  google_cancelled: 'Google sign-in was cancelled.',
+  google_unverified: "Your Google account's email address isn't verified.",
+  google_conflict: 'This email is already linked to a different Google account.',
+  google_expired: 'That sign-in attempt expired. Please try again.',
+  google_failed: 'Google sign-in failed. Please try again.',
+};
+
+/** Reads (and removes) an ?auth_error=… left by a failed Google sign-in. */
+export function takeAuthError(): string | null {
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get('auth_error');
+  if (!code) return null;
+  url.searchParams.delete('auth_error');
+  window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+  return GOOGLE_ERRORS[code] ?? GOOGLE_ERRORS.google_failed;
 }
 
 /** Must match MIN_PASSWORD in server/auth.ts (the server is the authority). */
@@ -50,6 +75,14 @@ export const authApi = {
     } catch (e) {
       if (e instanceof AuthError && e.status === 401) return null;
       throw e;
+    }
+  },
+  /** Which sign-in methods the server offers. */
+  async providers(): Promise<{ google: boolean }> {
+    try {
+      return (await request('/api/auth/providers')) as { google: boolean };
+    } catch {
+      return { google: false };
     }
   },
   signIn: async (email: string, password: string) => user(await request('/api/auth/login', { method: 'POST', body: { email, password } })),

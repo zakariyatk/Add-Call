@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { authApi, type Session } from './auth/api';
+import { authApi, takeAuthError, type Session } from './auth/api';
 import { brand } from './branding/brand.config';
 import { isActive } from './calls/callMachine';
 import { addToHistory, loadHistory } from './calls/history';
@@ -28,6 +28,7 @@ export default function App() {
   /** undefined while we ask the server whether a session exists. */
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [signedOutNotice, setSignedOutNotice] = useState<string | null>(null);
+  const [authError] = useState(takeAuthError);
   const [settings, setSettings] = useState<Settings>(() => loadSettings(store));
   const [view, setView] = useState<ViewId>(viewFromHash);
   const [history, setHistory] = useState<CallRecord[]>([]);
@@ -137,6 +138,7 @@ export default function App() {
     return (
       <LoginScreen
         notice={signedOutNotice}
+        error={authError}
         onSignedIn={(s) => {
           setSignedOutNotice(null);
           enter(s);

@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { brand } from '../src/branding/brand.config.ts';
 import { isEmail } from '../src/calls/protocol.ts';
 import type { Database, UserRow } from './db.ts';
+import { createGoogleSignIn, GoogleError, type GoogleConfig, type GoogleProfile } from './google.ts';
 import { hashPassword, needsRehash, verifyPassword } from './passwords.ts';
 
 /*
@@ -13,12 +14,17 @@ import { hashPassword, needsRehash, verifyPassword } from './passwords.ts';
  *   POST /api/auth/logout                                     → 204
  *   GET  /api/auth/me                                         → 200 { user } | 401
  *   POST /api/auth/password  { currentPassword, newPassword } → 204
+ *   GET  /api/auth/providers                                  → { google }
+ *   GET  /api/auth/google            → redirect to Google (see google.ts)
+ *   GET  /api/auth/google/callback   → session, then redirect to the app
  *
  * The session is a random 256-bit token in an HttpOnly, SameSite=Lax cookie;
  * only its SHA-256 is stored. POSTs must be JSON from this origin (CSRF).
  */
 
 export const SESSION_COOKIE = `${brand.storageKey}_session`;
+/** Short-lived cookie tying a Google sign-in to the browser that started it. */
+export const OAUTH_STATE_COOKIE = `${brand.storageKey}_oauth`;
 export const MIN_PASSWORD = 8;
 const MAX_PASSWORD = 200;
 const SESSION_DAYS = 30;
@@ -28,6 +34,9 @@ const MAX_BODY = 10 * 1024;
 export interface PublicUser {
   email: string;
   name: string;
+  /** False for accounts created with Google that never set a password. */
+  hasPassword: boolean;
+  google: boolean;
 }
 
 export interface AuthOptions {
@@ -40,9 +49,13 @@ export interface AuthOptions {
   allowedOrigins?: string[];
   /** Called when sessions end, so open call connections can be closed. */
   onSessionsRevoked?: (sessionIds: string[] | { userEmail: string; except?: string }) => void;
+  /** Enables "Sign in with Google". */
+  google?: GoogleConfig | null;
+  /** The app's public origin, e.g. https://call.example.com (for the Google callback URL). */
+  publicUrl?: string;
 }
 
-export const toPublic = (u: UserRow): PublicUser => ({ email: u.email, name: u.name });
+export const toPublic = (u: UserRow): PublicUser => ({ email: u.email, name: u.name, hasPassword: u.password_hash !== '', google: !!u.google_sub });
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
 class HttpError extends Error {
@@ -98,6 +111,7 @@ export function createAuth(opts: AuthOptions) {
   // Verifying against a dummy hash for unknown emails keeps response time the
   // same, so sign-in timing doesn't reveal which emails have accounts.
   const dummyHash = hashPassword(randomBytes(16).toString('hex'));
+  const google = opts.google ? createGoogleSignIn(opts.google, now) : null;
 
   const clientIp = (req: IncomingMessage) => {
     const fwd = opts.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : '';
@@ -117,11 +131,66 @@ export function createAuth(opts: AuthOptions) {
     ].join('; ');
   }
 
-  function startSession(req: IncomingMessage, res: ServerResponse, user: UserRow) {
+  function startSession(req: IncomingMessage, res: ServerResponse, user: UserRow, extraCookies: string[] = []) {
     const token = randomBytes(32).toString('base64url');
     const t = now();
     db.insertSession(sha256(token), user.id, t, t + SESSION_DAYS * DAY);
-    res.setHeader('Set-Cookie', cookie(req, token, SESSION_DAYS * 86_400));
+    res.setHeader('Set-Cookie', [cookie(req, token, SESSION_DAYS * 86_400), ...extraCookies]);
+  }
+
+  function stateCookie(req: IncomingMessage, value: string, maxAgeSec: number) {
+    // Lax is enough: the callback is a top-level GET navigation from Google.
+    return [`${OAUTH_STATE_COOKIE}=${value}`, 'Path=/api/auth/google', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAgeSec}`, ...(isHttps(req) ? ['Secure'] : [])].join('; ');
+  }
+
+  function googleRedirectUri(req: IncomingMessage) {
+    if (opts.google?.redirectUri) return opts.google.redirectUri;
+    const origin = opts.publicUrl?.replace(/\/$/, '') ?? `${isHttps(req) ? 'https' : 'http'}://${req.headers.host}`;
+    return `${origin}/api/auth/google/callback`;
+  }
+
+  /** Finds or creates the account for a verified Google profile. */
+  function accountForGoogle(p: GoogleProfile): UserRow {
+    const linked = db.userByGoogleSub(p.sub);
+    if (linked) return linked;
+    const existing = db.userByEmail(p.email);
+    if (existing) {
+      // Same verified email: link Google to the existing account.
+      if (existing.google_sub && existing.google_sub !== p.sub) throw new GoogleError('google_conflict', 'email linked to another Google account');
+      db.linkGoogle(existing.id, p.sub);
+      return db.userById(existing.id)!;
+    }
+    try {
+      return db.insertUser(p.email, p.name, '', now(), p.sub);
+    } catch {
+      throw new GoogleError('google_conflict', 'account creation raced');
+    }
+  }
+
+  function redirect(res: ServerResponse, location: string, cookies?: string[]) {
+    res.writeHead(302, { Location: location, 'Cache-Control': 'no-store', ...(cookies ? { 'Set-Cookie': cookies } : {}) });
+    res.end();
+  }
+
+  async function googleRoute(req: IncomingMessage, res: ServerResponse, path: string) {
+    if (!google) throw new HttpError(404, 'Google sign-in is not configured.');
+    if (path === '/api/auth/google') {
+      throttle(ipLimiter, clientIp(req));
+      const { url, state } = google.begin(googleRedirectUri(req));
+      return redirect(res, url, [stateCookie(req, state, 600)]);
+    }
+    // Callback
+    const clear = stateCookie(req, '', 0);
+    try {
+      const query = new URL(req.url ?? '', 'http://x').searchParams;
+      const profile = await google.complete(query, parseCookies(req.headers.cookie)[OAUTH_STATE_COOKIE]);
+      startSession(req, res, accountForGoogle(profile), [clear]);
+      return redirect(res, '/');
+    } catch (err) {
+      const code = err instanceof GoogleError ? err.code : 'google_failed';
+      if (!(err instanceof GoogleError) || code === 'google_failed') console.warn('[google sign-in]', err instanceof Error ? err.message : err);
+      return redirect(res, `/?auth_error=${code}`, [clear]);
+    }
   }
 
   /** The signed-in user for a request (HTTP or WebSocket upgrade), from its cookie. */
@@ -195,6 +264,8 @@ export function createAuth(opts: AuthOptions) {
       const auth = authenticate(req);
       return auth ? json(200, { user: auth.user }) : json(401, { error: 'Not signed in.' });
     }
+    if (path === '/api/auth/providers' && req.method === 'GET') return json(200, { google: !!google });
+    if ((path === '/api/auth/google' || path === '/api/auth/google/callback') && req.method === 'GET') return googleRoute(req, res, path);
 
     if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
     if (!sameOrigin(req)) throw new HttpError(403, 'Cross-origin request refused.');
@@ -255,7 +326,8 @@ export function createAuth(opts: AuthOptions) {
         const current = str(body.currentPassword);
         const next = str(body.newPassword);
         const user = db.userById(auth.userId)!;
-        if (!(await verifyPassword(current.slice(0, MAX_PASSWORD), user.password_hash)))
+        // Google-only accounts can add a password without knowing an old one.
+        if (user.password_hash !== '' && !(await verifyPassword(current.slice(0, MAX_PASSWORD), user.password_hash)))
           throw new HttpError(400, 'Your current password is incorrect.');
         validPassword(next);
         db.updatePassword(user.id, await hashPassword(next));

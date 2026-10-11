@@ -1,6 +1,7 @@
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import { createAuth } from './auth.ts';
 import { openDatabase } from './db.ts';
+import { googleConfigFromEnv } from './google.ts';
 import { createSignaling, iceServersFromEnv } from './signaling.ts';
 
 /*
@@ -27,13 +28,16 @@ export function createBackend({ databasePath, env = process.env }: BackendOption
     allowedOrigins,
     secureCookies: env.COOKIE_SECURE === undefined ? undefined : env.COOKIE_SECURE === '1' || env.COOKIE_SECURE === 'true',
     onSessionsRevoked: (sel) => revoke(sel),
+    google: googleConfigFromEnv(env),
+    publicUrl: env.PUBLIC_URL,
   });
   const signaling = createSignaling({
     iceServers: iceServersFromEnv(env),
     allowedOrigins,
     authenticate: (req) => {
       const a = auth.authenticate(req);
-      return a && { user: a.user, sessionId: a.sessionId };
+      // Other users only ever see name and email.
+      return a && { user: { email: a.user.email, name: a.user.name }, sessionId: a.sessionId };
     },
   });
   revoke = signaling.revoke;

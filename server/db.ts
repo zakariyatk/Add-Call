@@ -11,7 +11,10 @@ export interface UserRow {
   id: number;
   email: string;
   name: string;
+  /** Empty for accounts that only sign in with Google. */
   password_hash: string;
+  /** Google account id ("sub"), when linked. */
+  google_sub: string | null;
   created_at: number;
 }
 
@@ -41,15 +44,25 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
 `;
 
+/** Additive schema changes for databases created by older versions. */
+function migrate(db: DatabaseSync) {
+  const columns = (db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name);
+  if (!columns.includes('google_sub')) db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL');
+}
+
 export function openDatabase(path: string) {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec(SCHEMA);
+  migrate(db);
 
   const q = {
     userByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
     userById: db.prepare('SELECT * FROM users WHERE id = ?'),
-    insertUser: db.prepare('INSERT INTO users (email, name, password_hash, created_at) VALUES (?, ?, ?, ?)'),
+    insertUser: db.prepare('INSERT INTO users (email, name, password_hash, google_sub, created_at) VALUES (?, ?, ?, ?, ?)'),
+    userByGoogleSub: db.prepare('SELECT * FROM users WHERE google_sub = ?'),
+    linkGoogle: db.prepare('UPDATE users SET google_sub = ? WHERE id = ?'),
     updatePassword: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
     insertSession: db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'),
     session: db.prepare('SELECT * FROM sessions WHERE token_hash = ?'),
@@ -62,10 +75,12 @@ export function openDatabase(path: string) {
   return {
     userByEmail: (email: string) => q.userByEmail.get(email) as UserRow | undefined,
     userById: (id: number) => q.userById.get(id) as UserRow | undefined,
-    insertUser(email: string, name: string, passwordHash: string, now: number): UserRow {
-      const { lastInsertRowid } = q.insertUser.run(email, name, passwordHash, now);
+    insertUser(email: string, name: string, passwordHash: string, now: number, googleSub: string | null = null): UserRow {
+      const { lastInsertRowid } = q.insertUser.run(email, name, passwordHash, googleSub, now);
       return q.userById.get(lastInsertRowid) as unknown as UserRow;
     },
+    userByGoogleSub: (sub: string) => q.userByGoogleSub.get(sub) as UserRow | undefined,
+    linkGoogle: (id: number, sub: string) => void q.linkGoogle.run(sub, id),
     updatePassword: (id: number, hash: string) => void q.updatePassword.run(hash, id),
     insertSession: (tokenHash: string, userId: number, now: number, expiresAt: number) =>
       void q.insertSession.run(tokenHash, userId, now, expiresAt),

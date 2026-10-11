@@ -55,10 +55,10 @@ describe('accounts API', () => {
     const b = browser();
     const r = await b.call('/api/auth/signup', ann);
     expect(r.status).toBe(201);
-    expect(r.body).toEqual({ user: { email: 'ann@example.com', name: 'Ann Lee' } });
+    expect(r.body).toEqual({ user: { email: 'ann@example.com', name: 'Ann Lee', hasPassword: true, google: false } });
     expect(r.setCookie).toMatch(new RegExp(`^${SESSION_COOKIE}=[\\w-]{43}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000$`));
 
-    expect((await b.call('/api/auth/me')).body).toEqual({ user: { email: 'ann@example.com', name: 'Ann Lee' } });
+    expect((await b.call('/api/auth/me')).body).toMatchObject({ user: { email: 'ann@example.com', name: 'Ann Lee' } });
     expect((await b.call('/whoami')).body).toBe('ann@example.com');
 
     expect((await b.call('/api/auth/logout', {})).status).toBe(204);
