@@ -12,6 +12,15 @@ export interface Session {
   hasPassword?: boolean;
   /** Signed in with (or linked to) Google. */
   google?: boolean;
+  /** False until the address is confirmed via the emailed link (or Google). */
+  emailVerified?: boolean;
+}
+
+export interface Providers {
+  google: boolean;
+  passwordReset: boolean;
+  /** New accounts must confirm their email before calling. */
+  emailVerification: boolean;
 }
 
 /** Where the "Continue with Google" button sends the browser. */
@@ -31,6 +40,14 @@ const GOOGLE_ERRORS: Record<string, string> = {
  */
 export function takeResetToken(): string | null {
   const m = /^#\/reset\/([\w-]{20,100})$/.exec(window.location.hash);
+  if (!m) return null;
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  return m[1];
+}
+
+/** Reads (and removes) an email-verification token from a link like /#/verify/<token>. */
+export function takeVerifyToken(): string | null {
+  const m = /^#\/verify\/([\w-]{20,100})$/.exec(window.location.hash);
   if (!m) return null;
   window.history.replaceState(null, '', window.location.pathname + window.location.search);
   return m[1];
@@ -89,13 +106,17 @@ export const authApi = {
     }
   },
   /** Which sign-in methods the server offers. */
-  async providers(): Promise<{ google: boolean; passwordReset: boolean }> {
+  async providers(): Promise<Providers> {
     try {
-      return (await request('/api/auth/providers')) as { google: boolean; passwordReset: boolean };
+      return (await request('/api/auth/providers')) as Providers;
     } catch {
-      return { google: false, passwordReset: false };
+      return { google: false, passwordReset: false, emailVerification: false };
     }
   },
+  /** Confirms an address from the emailed link; works whether or not you're signed in. */
+  verifyEmail: async (token: string) => ((await request('/api/auth/verify', { method: 'POST', body: { token } })) as { email: string | null }).email,
+  /** Emails a fresh verification link to the signed-in account. */
+  resendVerification: async () => void (await request('/api/auth/verify/resend', { method: 'POST', body: {} })),
   /** Emails a reset link if the account exists. Succeeds either way, by design. */
   forgotPassword: async (email: string) => void (await request('/api/auth/forgot', { method: 'POST', body: { email } })),
   checkResetToken: async (token: string) => ((await request('/api/auth/reset/check', { method: 'POST', body: { token } })) as { valid: boolean }).valid,

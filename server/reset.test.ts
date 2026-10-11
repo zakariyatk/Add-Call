@@ -50,6 +50,8 @@ async function post(path: string, body: unknown, headers: Record<string, string>
 const ann = { name: 'Ann Lee', email: 'ann@example.com', password: 'original-pass' };
 const session = (setCookie: string | null) => setCookie?.split(';')[0] ?? '';
 const tokenFrom = (email: Email) => /#\/reset\/([\w-]+)/.exec(email.text)![1];
+/** Emails other than the sign-up verification message. */
+const mail = () => outbox.filter((m) => !m.subject.startsWith('Confirm your email'));
 
 async function forgot(email = ann.email, headers?: Record<string, string>) {
   const r = await post('/api/auth/forgot', { email }, headers);
@@ -65,15 +67,15 @@ describe('forgot password', () => {
     const oldSession = session(signup.setCookie);
 
     expect((await forgot('ANN@example.com')).status).toBe(202);
-    expect(outbox).toHaveLength(1);
-    const mail = outbox[0];
-    expect(mail.to).toBe('ann@example.com');
-    expect(mail.subject).toBe('Reset your Add Call password');
-    expect(mail.text).toMatch(/^https:\/\/call\.example\.com\/#\/reset\/[\w-]{43}$/m);
-    expect(mail.html).toContain('Choose a new password');
-    expect(mail.text).toContain(`expires in ${RESET_MINUTES} minutes`);
+    expect(mail()).toHaveLength(1);
+    const resetMail = mail()[0];
+    expect(resetMail.to).toBe('ann@example.com');
+    expect(resetMail.subject).toBe('Reset your Add Call password');
+    expect(resetMail.text).toMatch(/^https:\/\/call\.example\.com\/#\/reset\/[\w-]{43}$/m);
+    expect(resetMail.html).toContain('Choose a new password');
+    expect(resetMail.text).toContain(`expires in ${RESET_MINUTES} minutes`);
 
-    const token = tokenFrom(mail);
+    const token = tokenFrom(resetMail);
     expect((await post('/api/auth/reset/check', { token })).body).toEqual({ valid: true });
 
     const reset = await post('/api/auth/reset', { token, password: 'brand-new-pass' });
@@ -94,19 +96,19 @@ describe('forgot password', () => {
 
     // A security notice follows the change.
     await flush();
-    expect(outbox.at(-1)?.subject).toBe('Your Add Call password was changed');
+    expect(mail().at(-1)?.subject).toBe('Your Add Call password was changed');
   });
 
   it('answers the same for unknown emails and sends nothing', async () => {
     const r = await forgot('nobody@example.com');
     expect(r).toMatchObject({ status: 202, body: { ok: true } });
-    expect(outbox).toEqual([]);
+    expect(mail()).toEqual([]);
   });
 
   it('stores only a hash of the token', async () => {
     await post('/api/auth/signup', ann);
     await forgot();
-    const token = tokenFrom(outbox[0]);
+    const token = tokenFrom(mail()[0]);
     expect(db.reset(token)).toBeUndefined();
   });
 
@@ -114,7 +116,7 @@ describe('forgot password', () => {
     await post('/api/auth/signup', ann);
     await forgot();
     clock += (RESET_MINUTES + 1) * 60_000;
-    const r = await post('/api/auth/reset', { token: tokenFrom(outbox[0]), password: 'brand-new-pass' });
+    const r = await post('/api/auth/reset', { token: tokenFrom(mail()[0]), password: 'brand-new-pass' });
     expect(r).toMatchObject({ status: 400, body: { error: expect.stringMatching(/expired/) } });
   });
 
@@ -122,7 +124,7 @@ describe('forgot password', () => {
     await post('/api/auth/signup', ann);
     await forgot();
     await forgot();
-    const [first, second] = outbox.map(tokenFrom);
+    const [first, second] = mail().map(tokenFrom);
     expect((await post('/api/auth/reset', { token: first, password: 'brand-new-pass' })).status).toBe(400);
     expect((await post('/api/auth/reset', { token: second, password: 'brand-new-pass' })).status).toBe(200);
   });
@@ -130,7 +132,7 @@ describe('forgot password', () => {
   it('still enforces the password rules', async () => {
     await post('/api/auth/signup', ann);
     await forgot();
-    const r = await post('/api/auth/reset', { token: tokenFrom(outbox[0]), password: 'short' });
+    const r = await post('/api/auth/reset', { token: tokenFrom(mail()[0]), password: 'short' });
     expect(r.body.error).toMatch(/at least 8/);
     expect((await post('/api/auth/login', ann)).status).toBe(200);
   });
@@ -139,7 +141,7 @@ describe('forgot password', () => {
     await post('/api/auth/signup', ann);
     for (let i = 0; i < 3; i++) expect((await forgot()).status).toBe(202);
     expect((await forgot()).status).toBe(429);
-    expect(outbox).toHaveLength(3);
+    expect(mail()).toHaveLength(3);
     clock += 61 * 60_000;
     expect((await forgot()).status).toBe(202);
   });
@@ -154,14 +156,14 @@ describe('forgot password', () => {
     });
     expect(res.status).toBe(202);
     await flush();
-    for (const m of outbox) expect(m.text).toContain('https://call.example.com/#/reset/');
-    expect(outbox.some((m) => m.text.includes('evil'))).toBe(false);
+    for (const m of mail()) expect(m.text).toContain('https://call.example.com/#/reset/');
+    expect(mail().some((m) => m.text.includes('evil'))).toBe(false);
   });
 
   it('lets Google-only accounts set a first password', async () => {
     db.insertUser('g@example.com', 'G User', '', clock, 'google-sub-1');
     await forgot('g@example.com');
-    expect((await post('/api/auth/reset', { token: tokenFrom(outbox[0]), password: 'first-password' })).body.user).toMatchObject({
+    expect((await post('/api/auth/reset', { token: tokenFrom(mail()[0]), password: 'first-password' })).body.user).toMatchObject({
       hasPassword: true,
       google: true,
     });
@@ -171,8 +173,8 @@ describe('forgot password', () => {
     const s = session((await post('/api/auth/signup', ann)).setCookie);
     await post('/api/auth/password', { currentPassword: ann.password, newPassword: 'changed-pass-1' }, { cookie: s });
     await flush();
-    expect(outbox.map((m) => m.subject)).toEqual(['Your Add Call password was changed']);
-    expect(outbox[0].text).toContain('https://call.example.com');
+    expect(mail().map((m) => m.subject)).toEqual(['Your Add Call password was changed']);
+    expect(mail()[0].text).toContain('https://call.example.com');
   });
 
   it('reports the feature as available', async () => {
@@ -196,6 +198,6 @@ describe('when reset is not safely available', () => {
     await start({ publicUrl: undefined, devLinks: true });
     await post('/api/auth/signup', ann);
     await forgot();
-    expect(outbox[0].text).toContain(`${base}/#/reset/`);
+    expect(mail()[0].text).toContain(`${base}/#/reset/`);
   });
 });

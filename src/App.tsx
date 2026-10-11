@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { authApi, takeAuthError, takeResetToken, type Session } from './auth/api';
+import { authApi, takeAuthError, takeResetToken, takeVerifyToken, type Session } from './auth/api';
 import { brand } from './branding/brand.config';
 import { isActive } from './calls/callMachine';
 import { addToHistory, loadHistory } from './calls/history';
@@ -15,6 +15,7 @@ import { LoginScreen } from './views/LoginScreen';
 import { PeopleView } from './views/PeopleView';
 import { RecentsView } from './views/RecentsView';
 import { ResetPasswordScreen } from './views/ResetPasswordScreen';
+import { VerifyEmailLink, VerifyEmailPending } from './views/VerifyEmailScreen';
 import { SettingsView } from './views/SettingsView';
 
 const store = browserStore();
@@ -31,6 +32,8 @@ export default function App() {
   const [signedOutNotice, setSignedOutNotice] = useState<string | null>(null);
   const [authError] = useState(takeAuthError);
   const [resetToken, setResetToken] = useState(takeResetToken);
+  const [verifyToken, setVerifyToken] = useState(takeVerifyToken);
+  const [verificationRequired, setVerificationRequired] = useState(false);
   const [settings, setSettings] = useState<Settings>(() => loadSettings(store));
   const [view, setView] = useState<ViewId>(viewFromHash);
   const [history, setHistory] = useState<CallRecord[]>([]);
@@ -44,11 +47,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    void authApi.providers().then((p) => setVerificationRequired(p.emailVerification));
     authApi.me().then(enter, () => {
       setSignedOutNotice(`Can't reach ${brand.name} right now.`);
       enter(null);
     });
   }, [enter]);
+
+  // Unconfirmed addresses can't call (the server enforces this too).
+  const needsVerification = verificationRequired && session?.emailVerified === false;
 
   useEffect(() => {
     applyTheme(settings.theme);
@@ -56,7 +63,14 @@ export default function App() {
   }, [settings]);
 
   useEffect(() => {
-    const onHash = () => setView(viewFromHash());
+    const onHash = () => {
+      // An emailed link pasted into an already-open tab only changes the hash.
+      const verify = takeVerifyToken();
+      if (verify) return setVerifyToken(verify);
+      const reset = takeResetToken();
+      if (reset) return setResetToken(reset);
+      setView(viewFromHash());
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -68,7 +82,7 @@ export default function App() {
     [session],
   );
   const prefs = useMemo(() => ({ noiseSuppression: settings.noiseSuppression, ringSound: settings.ringSound }), [settings]);
-  const calling = useCalling(session ?? null, prefs, addRecord);
+  const calling = useCalling(session && !needsVerification ? session : null, prefs, addRecord);
   const { call, controller, connection } = calling;
 
   // The server ended this session (signed out elsewhere, password changed).
@@ -144,6 +158,18 @@ export default function App() {
       />
     );
 
+  if (verifyToken)
+    return (
+      <VerifyEmailLink
+        token={verifyToken}
+        session={session}
+        onContinue={(s) => {
+          setVerifyToken(null);
+          if (s) enter(s);
+        }}
+      />
+    );
+
   if (session === undefined)
     return (
       <div className="splash" aria-busy="true" aria-label={`Loading ${brand.name}`}>
@@ -159,6 +185,18 @@ export default function App() {
         onSignedIn={(s) => {
           setSignedOutNotice(null);
           enter(s);
+        }}
+      />
+    );
+
+  if (needsVerification)
+    return (
+      <VerifyEmailPending
+        session={session}
+        onVerified={enter}
+        onSignOut={() => {
+          void authApi.signOut().catch(() => {});
+          enter(null);
         }}
       />
     );

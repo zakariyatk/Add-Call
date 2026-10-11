@@ -55,7 +55,7 @@ describe('accounts API', () => {
     const b = browser();
     const r = await b.call('/api/auth/signup', ann);
     expect(r.status).toBe(201);
-    expect(r.body).toEqual({ user: { email: 'ann@example.com', name: 'Ann Lee', hasPassword: true, google: false } });
+    expect(r.body).toEqual({ user: { email: 'ann@example.com', name: 'Ann Lee', hasPassword: true, google: false, emailVerified: false } });
     expect(r.setCookie).toMatch(new RegExp(`^${SESSION_COOKIE}=[\\w-]{43}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000$`));
 
     expect((await b.call('/api/auth/me')).body).toMatchObject({ user: { email: 'ann@example.com', name: 'Ann Lee' } });

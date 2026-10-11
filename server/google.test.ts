@@ -148,7 +148,7 @@ describe('Sign in with Google', () => {
     expect(r.redirectTo).toBe('/');
     expect(r.session).toBeTruthy();
     expect(cookieValue(r.cb.headers.getSetCookie(), OAUTH_STATE_COOKIE)).toBe(''); // cleared
-    expect(await me(r.session)).toEqual({ email: 'ann.lee@gmail.com', name: 'Ann Lee', hasPassword: false, google: true });
+    expect(await me(r.session)).toEqual({ email: 'ann.lee@gmail.com', name: 'Ann Lee', hasPassword: false, google: true, emailVerified: true });
     expect(lastTokenRequest?.get('client_secret')).toBe(CLIENT_SECRET);
     expect(lastTokenRequest?.get('grant_type')).toBe('authorization_code');
   });
@@ -163,7 +163,7 @@ describe('Sign in with Google', () => {
   it('links Google to an existing password account with the same verified email', async () => {
     db.insertUser('ann.lee@gmail.com', 'Ann (password)', await hashPassword('pw-12345678'), clock);
     const r = await signInWithGoogle();
-    expect(await me(r.session)).toEqual({ email: 'ann.lee@gmail.com', name: 'Ann (password)', hasPassword: true, google: true });
+    expect(await me(r.session)).toEqual({ email: 'ann.lee@gmail.com', name: 'Ann (password)', hasPassword: true, google: true, emailVerified: true });
     expect(db.userByEmail('ann.lee@gmail.com')?.google_sub).toBe('1234567890');
   });
 

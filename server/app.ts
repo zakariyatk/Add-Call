@@ -47,8 +47,11 @@ export function createBackend({ databasePath, env = process.env, dev = false }: 
     allowedOrigins,
     authenticate: (req) => {
       const a = auth.authenticate(req);
+      // Unverified addresses can't place or receive calls: otherwise anyone could
+      // sign up as someone else's email and take their calls.
+      if (!a || (auth.verificationRequired && !a.user.emailVerified)) return null;
       // Other users only ever see name and email.
-      return a && { user: { email: a.user.email, name: a.user.name }, sessionId: a.sessionId };
+      return { user: { email: a.user.email, name: a.user.name }, sessionId: a.sessionId };
     },
   });
   revoke = signaling.revoke;

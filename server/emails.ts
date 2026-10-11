@@ -63,3 +63,28 @@ export function passwordChangedEmail(brand: BrandConfig, to: { email: string; na
     ),
   };
 }
+
+export function verifyEmailEmail(brand: BrandConfig, to: { email: string; name: string }, link: string, validHours: number): Email {
+  const c = brand.colors.light;
+  return {
+    to: to.email,
+    subject: `Confirm your email for ${brand.name}`,
+    text: [
+      `Hi ${to.name},`,
+      '',
+      `Welcome to ${brand.name}! Confirm this is your email address to start making calls:`,
+      '',
+      link,
+      '',
+      `The link expires in ${validHours} hours. If you didn't create an account, you can ignore this email.`,
+    ].join('\n'),
+    html: layout(
+      brand,
+      `<p style="margin:0 0 12px;">Hi ${esc(to.name)},</p>
+<p style="margin:0 0 24px;">Welcome to ${esc(brand.name)}! Confirm this is your email address to start making calls.</p>
+<p style="margin:0 0 24px;"><a href="${esc(link)}" style="display:inline-block;background:${c.accent};color:${c.accentInk};text-decoration:none;font-weight:600;padding:12px 20px;border-radius:${brand.theme.radius - 4}px;">Confirm my email</a></p>
+<p style="margin:0 0 8px;color:${c.textMuted};font-size:13px;">Or paste this link into your browser:<br><span style="word-break:break-all;">${esc(link)}</span></p>
+<p style="margin:16px 0 0;color:${c.textMuted};font-size:13px;">The link expires in ${validHours} hours. If you didn't create an account, ignore this email.</p>`,
+    ),
+  };
+}

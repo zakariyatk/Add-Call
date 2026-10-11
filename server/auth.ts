@@ -4,7 +4,7 @@ import { brand } from '../src/branding/brand.config.ts';
 import { isEmail } from '../src/calls/protocol.ts';
 import type { Database, UserRow } from './db.ts';
 import { createGoogleSignIn, GoogleError, type GoogleConfig, type GoogleProfile } from './google.ts';
-import { passwordChangedEmail, passwordResetEmail } from './emails.ts';
+import { passwordChangedEmail, passwordResetEmail, verifyEmailEmail } from './emails.ts';
 import type { Email, Mailer } from './mailer.ts';
 import { hashPassword, needsRehash, verifyPassword } from './passwords.ts';
 
@@ -20,6 +20,8 @@ import { hashPassword, needsRehash, verifyPassword } from './passwords.ts';
  *   POST /api/auth/forgot       { email }            → 202 (always; emails a reset link)
  *   POST /api/auth/reset/check  { token }            → { valid }
  *   POST /api/auth/reset        { token, password }  → 200 { user } (signed in)
+ *   POST /api/auth/verify       { token }            → 200 { email } (marks the address verified)
+ *   POST /api/auth/verify/resend                     → 202 (emails a new link)
  *   GET  /api/auth/google            → redirect to Google (see google.ts)
  *   GET  /api/auth/google/callback   → session, then redirect to the app
  *
@@ -32,6 +34,8 @@ export const SESSION_COOKIE = `${brand.storageKey}_session`;
 export const OAUTH_STATE_COOKIE = `${brand.storageKey}_oauth`;
 /** How long a password-reset link works. */
 export const RESET_MINUTES = 60;
+/** How long an email-verification link works. */
+export const VERIFY_HOURS = 24;
 export const MIN_PASSWORD = 8;
 const MAX_PASSWORD = 200;
 const SESSION_DAYS = 30;
@@ -44,6 +48,7 @@ export interface PublicUser {
   /** False for accounts created with Google that never set a password. */
   hasPassword: boolean;
   google: boolean;
+  emailVerified: boolean;
 }
 
 export interface AuthOptions {
@@ -70,7 +75,13 @@ export interface AuthOptions {
   devLinks?: boolean;
 }
 
-export const toPublic = (u: UserRow): PublicUser => ({ email: u.email, name: u.name, hasPassword: u.password_hash !== '', google: !!u.google_sub });
+export const toPublic = (u: UserRow): PublicUser => ({
+  email: u.email,
+  name: u.name,
+  hasPassword: u.password_hash !== '',
+  google: !!u.google_sub,
+  emailVerified: u.email_verified_at !== null,
+});
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
 class HttpError extends Error {
@@ -133,6 +144,17 @@ export function createAuth(opts: AuthOptions) {
   const appOrigin = (req: IncomingMessage): string | null =>
     opts.publicUrl?.replace(/\/$/, '') ?? (opts.devLinks ? `${isHttps(req) ? 'https' : 'http'}://${req.headers.host}` : null);
   const resetAvailable = !!opts.mailer && (!!opts.publicUrl || !!opts.devLinks);
+  /** Verification needs working email; without it, accounts can't be asked to verify. */
+  const verificationRequired = resetAvailable;
+  const verifyLimiter = createRateLimiter(3, 60 * 60_000, now);
+
+  function sendVerification(req: IncomingMessage, user: UserRow) {
+    const origin = appOrigin(req);
+    if (!origin) return;
+    const token = randomBytes(32).toString('base64url');
+    db.insertVerification(sha256(token), user.id, now(), now() + VERIFY_HOURS * 3_600_000);
+    sendLater(verifyEmailEmail(brand, user, `${origin}/#/verify/${token}`, VERIFY_HOURS));
+  }
 
   /** Sends in the background: response time must not depend on whether an account exists. */
   function sendLater(email: Email) {
@@ -184,10 +206,11 @@ export function createAuth(opts: AuthOptions) {
       // Same verified email: link Google to the existing account.
       if (existing.google_sub && existing.google_sub !== p.sub) throw new GoogleError('google_conflict', 'email linked to another Google account');
       db.linkGoogle(existing.id, p.sub);
+      db.markVerified(existing.id, now());
       return db.userById(existing.id)!;
     }
     try {
-      return db.insertUser(p.email, p.name, '', now(), p.sub);
+      return db.insertUser(p.email, p.name, '', now(), p.sub, true); // Google verified the email
     } catch {
       throw new GoogleError('google_conflict', 'account creation raced');
     }
@@ -290,7 +313,8 @@ export function createAuth(opts: AuthOptions) {
       const auth = authenticate(req);
       return auth ? json(200, { user: auth.user }) : json(401, { error: 'Not signed in.' });
     }
-    if (path === '/api/auth/providers' && req.method === 'GET') return json(200, { google: !!google, passwordReset: resetAvailable });
+    if (path === '/api/auth/providers' && req.method === 'GET')
+      return json(200, { google: !!google, passwordReset: resetAvailable, emailVerification: verificationRequired });
     if ((path === '/api/auth/google' || path === '/api/auth/google/callback') && req.method === 'GET') return googleRoute(req, res, path);
 
     if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
@@ -315,6 +339,7 @@ export function createAuth(opts: AuthOptions) {
           throw new HttpError(409, 'An account with this email already exists. Sign in instead.'); // lost a race
         }
         startSession(req, res, user);
+        if (verificationRequired) sendVerification(req, user);
         return json(201, { user: toPublic(user) });
       }
 
@@ -404,6 +429,8 @@ export function createAuth(opts: AuthOptions) {
         if (!user) throw new HttpError(400, 'This reset link is invalid or has expired. Request a new one.');
         db.updatePassword(user.id, await hashPassword(password));
         db.deleteUserResets(user.id);
+        // Opening the emailed link proves the address too.
+        db.markVerified(user.id, now());
         // Whoever had access before the reset is signed out everywhere.
         db.deleteUserSessions(user.id);
         opts.onSessionsRevoked?.({ userEmail: user.email });
@@ -412,6 +439,28 @@ export function createAuth(opts: AuthOptions) {
         const origin = appOrigin(req);
         if (origin) sendLater(passwordChangedEmail(brand, user, origin));
         return json(200, { user: toPublic(db.userById(user.id)!) });
+      }
+
+      case '/api/auth/verify': {
+        throttle(ipLimiter, clientIp(req));
+        const body = await readJson(req);
+        const row = db.verification(sha256(str(body.token)));
+        if (!row || row.expires_at <= now()) throw new HttpError(400, 'This verification link is invalid or has expired.');
+        db.markVerified(row.user_id, now());
+        db.deleteUserVerifications(row.user_id);
+        const user = db.userById(row.user_id);
+        return json(200, { email: user?.email ?? null });
+      }
+
+      case '/api/auth/verify/resend': {
+        const auth = authenticate(req);
+        if (!auth) throw new HttpError(401, 'Not signed in.');
+        const user = db.userById(auth.userId)!;
+        if (user.email_verified_at !== null) return json(200, { alreadyVerified: true });
+        if (!verificationRequired) throw new HttpError(404, 'Email verification is not available.');
+        throttle(verifyLimiter, user.email);
+        sendVerification(req, user);
+        return json(202, { ok: true });
       }
 
       default:
@@ -439,7 +488,7 @@ export function createAuth(opts: AuthOptions) {
   const sweep = setInterval(() => db.deleteExpired(now()), 6 * 60 * 60_000);
   sweep.unref?.();
 
-  return { handle, authenticate, close: () => clearInterval(sweep) };
+  return { handle, authenticate, verificationRequired, close: () => clearInterval(sweep) };
 }
 
 export type Auth = ReturnType<typeof createAuth>;

@@ -10,6 +10,11 @@ over WebRTC.
   with Google**. Sessions last 30 days and renew while you use the app. You can
   sign out, and changing your password signs out your other devices. Google
   users can add a password later.
+- **Email verification**: new accounts confirm their address with an emailed
+  link (expires in 24 hours, can be resent) before they can call or appear
+  online. Google sign-ins and completed password resets count as verified, and
+  accounts that existed before this feature were marked verified. It's only
+  required when email is configured.
 - **Forgot password**: get an emailed link to choose a new password (works
   once, expires after an hour). Resetting signs you in and signs out every
   other device, and a "password changed" notice is emailed to you.
@@ -178,6 +183,12 @@ Requirements for real-world use:
   not the email has an account, and sends the email in the background so
   timing doesn't reveal it either. Reset emails are limited to 3 per address
   per hour. A successful reset signs out all sessions and emails a notice.
+- **Email verification**: the calling server refuses unverified accounts, so
+  nobody can sign up with someone else's address and receive their calls. If
+  someone registers an address they don't own, the real owner can take it back
+  with "Forgot password?": the reset verifies the address and signs everyone
+  else out. Links are single-use and stored hashed, a new link cancels the
+  old, and resends are limited to 3 per hour.
 - **Account linking**: a Google account is matched by its permanent Google ID.
   The first Google sign-in with an email that already has a password account
   links the two, because Google has verified that the person owns that email.
@@ -197,8 +208,7 @@ Requirements for real-world use:
   checked, and dead connections are dropped.
 
 **Not included yet**
-- Email verification at sign-up (email sending is now in place, so this is a
-  small addition).
+- Changing the email address on an account.
 - Sign in with Apple, and two-factor authentication.
 - Calls are one-to-one. Calling phone numbers would need a telephony provider
   (SIP / PSTN gateway).
@@ -240,7 +250,7 @@ scripts/               generate-icons.ts, e2e-call.mjs
 
 ## Roadmap
 
-- Email verification at sign-up.
+- Change email address.
 - Sign in with Apple; two-factor authentication.
 - Saved contacts and server-side call history.
 - Push notifications for incoming calls when the tab is closed.
