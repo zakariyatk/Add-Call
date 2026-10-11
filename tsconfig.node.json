@@ -15,5 +15,5 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["vite.config.ts", "vite.brand.ts", "scripts", "server", "src/branding", "src/calls/protocol.ts"]
+  "include": ["vite.config.ts", "vite.brand.ts", "scripts", "src/branding"]
 }

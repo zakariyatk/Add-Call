@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
-import type { ConnectionStatus } from '../calls/signalingClient';
+import type { ConnectionStatus } from '../calls/CallController';
 import { brand, type ThemeMode } from '../branding/brand.config';
 import { Lockup } from '../components/Logo';
 import { Avatar, PageHeader, Switch } from '../components/ui';
@@ -81,7 +81,7 @@ export function SettingsView({
           <dt>Version</dt>
           <dd>{brand.version}</dd>
           <dt>Calling</dt>
-          <dd>WebRTC, peer to peer · {connection === 'online' ? 'connected' : connection === 'connecting' ? 'connecting' : 'not connected'}</dd>
+          <dd>LiveKit · {connection === 'online' ? 'connected' : connection === 'connecting' ? 'connecting' : 'not connected'}</dd>
         </dl>
       </div>
     </section>

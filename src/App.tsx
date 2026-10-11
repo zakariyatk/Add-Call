@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { authApi, takeAuthError, takeResetToken, takeVerifyToken, type Session } from './auth/api';
 import { brand } from './branding/brand.config';
 import { isActive } from './calls/callMachine';
@@ -33,7 +33,6 @@ export default function App() {
   const [authError] = useState(takeAuthError);
   const [resetToken, setResetToken] = useState(takeResetToken);
   const [verifyToken, setVerifyToken] = useState(takeVerifyToken);
-  const [verificationRequired, setVerificationRequired] = useState(false);
   const [settings, setSettings] = useState<Settings>(() => loadSettings(store));
   const [view, setView] = useState<ViewId>(viewFromHash);
   const [history, setHistory] = useState<CallRecord[]>([]);
@@ -46,16 +45,31 @@ export default function App() {
     setRecentsSeen(s ? Number(store.getItem(seenKey(s.email)) ?? 0) : 0);
   }, []);
 
+  /** True while this tab is signing out on purpose (so it isn't reported as "signed out elsewhere"). */
+  const signingOut = useRef(false);
+  const sessionRef = useRef(session);
   useEffect(() => {
-    void authApi.providers().then((p) => setVerificationRequired(p.emailVerification));
+    sessionRef.current = session;
+  }, [session]);
+
+  useEffect(() => {
     authApi.me().then(enter, () => {
       setSignedOutNotice(`Can't reach ${brand.name} right now.`);
       enter(null);
     });
+    // Sign-ins and sign-outs in other tabs, emailed links, and sessions that expired.
+    return authApi.onChange((s) => {
+      if (s) return enter(s);
+      const prev = sessionRef.current;
+      if (prev && !prev.id) return; // keep a "confirm your email" screen up
+      if (prev && !signingOut.current) setSignedOutNotice('You were signed out. Sign in again to continue.');
+      signingOut.current = false;
+      enter(null);
+    });
   }, [enter]);
 
-  // Unconfirmed addresses can't call (the server enforces this too).
-  const needsVerification = verificationRequired && session?.emailVerified === false;
+  // Accounts that haven't opened their emailed link can't sign in or call yet.
+  const needsVerification = session?.emailVerified === false;
 
   useEffect(() => {
     applyTheme(settings.theme);
@@ -84,24 +98,6 @@ export default function App() {
   const prefs = useMemo(() => ({ noiseSuppression: settings.noiseSuppression, ringSound: settings.ringSound }), [settings]);
   const calling = useCalling(session && !needsVerification ? session : null, prefs, addRecord);
   const { call, controller, connection } = calling;
-
-  // The server ended this session (signed out elsewhere, password changed).
-  useEffect(() => {
-    if (connection !== 'signed-out') return;
-    setSignedOutNotice('You were signed out. Sign in again to continue.');
-    enter(null);
-  }, [connection, enter]);
-
-  // If the call connection drops, check the session is still valid.
-  useEffect(() => {
-    if (connection !== 'offline' || !session) return;
-    authApi.me().then((s) => {
-      if (!s) {
-        setSignedOutNotice('Your session expired. Sign in again to continue.');
-        enter(null);
-      }
-    }, () => {});
-  }, [connection, session, enter]);
 
   // Opening Recents clears the missed-call badge.
   useEffect(() => {
@@ -203,6 +199,7 @@ export default function App() {
         session={session}
         onVerified={enter}
         onSignOut={() => {
+          signingOut.current = true;
           void authApi.signOut().catch(() => {});
           enter(null);
         }}
@@ -212,6 +209,7 @@ export default function App() {
   const startCall = (peer: Peer, video?: boolean) => void controller.dial(peer, video ?? settings.startWithVideo);
   const signOut = async () => {
     controller.disconnect();
+    signingOut.current = true;
     await authApi.signOut().catch(() => {});
     setSignedOutNotice(null);
     enter(null);

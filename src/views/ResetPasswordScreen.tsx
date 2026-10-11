@@ -1,22 +1,16 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
 import { brand } from '../branding/brand.config';
 import { Lockup } from '../components/Logo';
 
 /** Opened from the emailed link (/#/reset/<token>): choose a new password, then you're signed in. */
 export function ResetPasswordScreen({ token, onDone, onCancel }: { token: string; onDone: (s: Session) => void; onCancel: () => void }) {
-  const [status, setStatus] = useState<'checking' | 'ready' | 'invalid'>('checking');
+  // The link can only be checked by using it, so it's checked when the new password is saved.
+  const [status, setStatus] = useState<'checking' | 'ready' | 'invalid'>('ready');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    authApi.checkResetToken(token).then(
-      (valid) => setStatus(valid ? 'ready' : 'invalid'),
-      () => setStatus('ready'), // can't check right now; the submit will say if it's bad
-    );
-  }, [token]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();

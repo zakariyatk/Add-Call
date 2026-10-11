@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Session } from '../auth/api';
-import type { ConnectionStatus } from '../calls/signalingClient';
+import type { ConnectionStatus } from '../calls/CallController';
 import { brand } from '../branding/brand.config';
 import { Icon } from './Icon';
 import { Lockup } from './Logo';
@@ -12,8 +12,6 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
   online: 'Online',
   connecting: 'Connecting…',
   offline: 'Offline',
-  replaced: 'Open in another tab',
-  'signed-out': 'Signed out',
 };
 
 export function AppShell({

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { brand } from '../branding/brand.config';
 import { isEmail, type PresenceUser } from '../calls/protocol';
-import type { ConnectionStatus } from '../calls/signalingClient';
+import type { ConnectionStatus } from '../calls/CallController';
 import type { CallRecord, Peer } from '../calls/types';
 import { Icon } from '../components/Icon';
 import { Avatar, CallButton, EmptyState, PageHeader } from '../components/ui';
