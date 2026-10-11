@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
@@ -12,8 +12,10 @@ class Client {
   private waiters: { type: string; resolve: (m: ServerMessage) => void }[] = [];
   readonly open: Promise<void>;
 
-  constructor(url: string, origin?: string) {
-    this.ws = new WebSocket(url, origin ? { origin } : undefined);
+  constructor(url: string, opts: { origin?: string; user?: string; session?: string } = {}) {
+    const headers: Record<string, string> = {};
+    if (opts.user) headers.cookie = `test_user=${encodeURIComponent(opts.user)}; test_session=${opts.session ?? opts.user}`;
+    this.ws = new WebSocket(url, { origin: opts.origin, headers });
     this.open = new Promise((res, rej) => {
       this.ws.once('open', () => res());
       this.ws.once('error', rej);
@@ -52,18 +54,27 @@ let signaling: ReturnType<typeof createSignaling>;
 let url: string;
 const clients: Client[] = [];
 
-async function join(email: string, name = email.split('@')[0]) {
-  const c = new Client(url);
+/** Connects as a signed-in user (the test authenticator trusts a cookie). */
+async function join(email: string, session = email) {
+  const c = new Client(url, { user: email, session });
   clients.push(c);
   await c.open;
-  c.send({ type: 'hello', email, name });
   await c.next('welcome');
   return c;
 }
 
+/** Stand-in for server/auth.ts: identity from a test cookie, names from the address. */
+const testAuthenticate = (req: IncomingMessage) => {
+  const cookies = Object.fromEntries((req.headers.cookie ?? '').split('; ').map((c) => c.split('=').map(decodeURIComponent)));
+  const email = cookies.test_user;
+  if (!email) return null;
+  const name = email.split('@')[0].replace(/^\w/, (c: string) => c.toUpperCase());
+  return { user: { email, name }, sessionId: cookies.test_session };
+};
+
 beforeEach(async () => {
   server = createServer();
-  signaling = createSignaling({ ringTimeoutMs: 200, iceServers: [{ urls: 'stun:example.org' }] });
+  signaling = createSignaling({ ringTimeoutMs: 200, iceServers: [{ urls: 'stun:example.org' }], authenticate: testAuthenticate });
   signaling.attach(server);
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   url = `ws://127.0.0.1:${(server.address() as AddressInfo).port}/ws`;
@@ -76,19 +87,18 @@ afterEach(async () => {
 });
 
 describe('signaling server', () => {
-  it('welcomes users with ICE servers and broadcasts presence', async () => {
-    const a = new Client(url);
+  it('welcomes signed-in users with ICE servers and broadcasts presence', async () => {
+    const a = new Client(url, { user: 'ann@example.com' });
     clients.push(a);
     await a.open;
-    a.send({ type: 'hello', email: 'Ann@Example.com', name: 'Ann' });
     expect(await a.next('welcome')).toEqual({ type: 'welcome', you: { email: 'ann@example.com', name: 'Ann' }, iceServers: [{ urls: 'stun:example.org' }] });
-    await join('bob@example.com', 'Bob');
+    await join('bob@example.com');
     expect((await a.presence())?.map((u) => u.email).sort()).toEqual(['ann@example.com', 'bob@example.com']);
   });
 
   it('runs a full call: invite, ring, accept, relay SDP/ICE, hang up', async () => {
-    const a = await join('ann@example.com', 'Ann');
-    const b = await join('bob@example.com', 'Bob');
+    const a = await join('ann@example.com');
+    const b = await join('bob@example.com');
 
     a.send({ type: 'call', callId: 'call-0001', to: 'bob@example.com', video: true });
     expect(await b.next('incoming')).toEqual({ type: 'incoming', callId: 'call-0001', from: { email: 'ann@example.com', name: 'Ann' }, video: true });
@@ -171,14 +181,30 @@ describe('signaling server', () => {
     expect(await a.next('ended')).toMatchObject({ reason: 'failed' });
   });
 
-  it('requires hello first and rejects malformed input', async () => {
-    const c = new Client(url);
-    clients.push(c);
-    await c.open;
-    c.send({ type: 'call', callId: 'call-0010', to: 'x@y.io', video: false });
-    expect(await c.next('error')).toMatchObject({ message: 'Say hello first.' });
-    c.ws.send('{"type":"hello","email":"bad"}');
+  it('refuses connections without a session', async () => {
+    const anon = new Client(url);
+    await expect(anon.open).rejects.toThrow(/401/);
+  });
+
+  it('rejects malformed input', async () => {
+    const c = await join('ann@example.com');
+    c.ws.send('{"type":"call","to":"bad"}');
     expect((await c.next('error')).message).toBe('Malformed message.');
+  });
+
+  it('closes the sockets of revoked sessions and ends their calls', async () => {
+    const a = await join('ann@example.com', 'sess-a');
+    const b = await join('bob@example.com', 'sess-b');
+    a.send({ type: 'call', callId: 'call-0011', to: 'bob@example.com', video: false });
+    await b.next('incoming');
+    signaling.revoke(['sess-b']);
+    await b.next('signed-out');
+    expect(await a.next('ended')).toMatchObject({ reason: 'disconnected' });
+    signaling.revoke({ userEmail: 'ann@example.com', except: 'sess-a' });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(a.ws.readyState).toBe(WebSocket.OPEN);
+    signaling.revoke({ userEmail: 'ann@example.com' });
+    await a.next('signed-out');
   });
 
   it('replaces an older session for the same address', async () => {
@@ -189,9 +215,9 @@ describe('signaling server', () => {
   });
 
   it('refuses cross-origin browsers', async () => {
-    const evil = new Client(url, 'https://evil.example');
+    const evil = new Client(url, { origin: 'https://evil.example', user: 'ann@example.com' });
     await expect(evil.open).rejects.toThrow(/403/);
-    const same = new Client(url, url.replace('ws://', 'http://').replace('/ws', ''));
+    const same = new Client(url, { origin: url.replace('ws://', 'http://').replace('/ws', ''), user: 'ann@example.com' });
     clients.push(same);
     await expect(same.open).resolves.toBeUndefined();
   });

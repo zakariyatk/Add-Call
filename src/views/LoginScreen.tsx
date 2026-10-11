@@ -1,20 +1,40 @@
 import { useState, type FormEvent } from 'react';
-import { MIN_PASSWORD, SignInError, type Auth, type Session } from '../auth/session';
+import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
 import { brand } from '../branding/brand.config';
 import { Lockup, LogoMark } from '../components/Logo';
 
-export function LoginScreen({ auth, onSignedIn }: { auth: Auth; onSignedIn: (s: Session) => void }) {
+type Mode = 'signin' | 'signup';
+
+export function LoginScreen({ onSignedIn, notice }: { onSignedIn: (s: Session) => void; notice?: string | null }) {
+  const [mode, setMode] = useState<Mode>('signin');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const signup = mode === 'signup';
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (busy) return;
+    if (signup && password.length < MIN_PASSWORD) return setError(`Use at least ${MIN_PASSWORD} characters for your password.`);
+    setBusy(true);
+    setError(null);
     try {
-      onSignedIn(auth.signIn(email, password));
+      onSignedIn(signup ? await authApi.signUp(name, email, password) : await authApi.signIn(email, password));
     } catch (err) {
-      setError(err instanceof SignInError ? err.message : 'Sign-in failed. Try again.');
+      setError(err instanceof AuthError ? err.message : 'Something went wrong. Please try again.');
+      setPassword('');
+    } finally {
+      setBusy(false);
     }
+  };
+
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setError(null);
+    setPassword('');
   };
 
   return (
@@ -28,36 +48,67 @@ export function LoginScreen({ auth, onSignedIn }: { auth: Auth; onSignedIn: (s: 
       </aside>
 
       <main className="login-main">
-        <form className="login-card" onSubmit={submit} noValidate>
+        <form className="login-card" onSubmit={submit} noValidate aria-busy={busy}>
           <div className="login-brand">
             <Lockup size={36} />
           </div>
-          <h1>Sign in to {brand.name}</h1>
-          <p className="muted">Welcome back. Enter your details to continue.</p>
+          <h1>{signup ? `Create your ${brand.name} account` : `Sign in to ${brand.name}`}</h1>
+          <p className="muted">{signup ? 'Free, and takes a few seconds.' : 'Welcome back. Enter your details to continue.'}</p>
 
+          {notice && !error && (
+            <p className="form-notice" role="status">
+              {notice}
+            </p>
+          )}
+
+          {signup && (
+            <label className="field">
+              <span>Name</span>
+              <input type="text" autoComplete="name" required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
+            </label>
+          )}
           <label className="field">
             <span>Email</span>
             <input
               type="email"
-              autoComplete="email"
+              autoComplete={signup ? 'email' : 'username'}
               autoFocus
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              aria-invalid={error ? true : undefined}
               placeholder="you@example.com"
             />
           </label>
-          <label className="field">
-            <span>Password</span>
+          <div className="field">
+            <span className="field-row">
+              <label htmlFor="password">Password</label>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-pressed={showPassword}
+                aria-controls="password"
+              >
+                {showPassword ? 'Hide password' : 'Show password'}
+              </button>
+            </span>
             <input
-              type="password"
-              autoComplete="current-password"
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete={signup ? 'new-password' : 'current-password'}
+              required
+              minLength={signup ? MIN_PASSWORD : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               aria-invalid={error ? true : undefined}
-              aria-describedby={error ? 'login-error' : undefined}
+              aria-describedby={error ? 'login-error' : signup ? 'password-hint' : undefined}
             />
-          </label>
+            {signup && (
+              <span id="password-hint" className="field-hint">
+                At least {MIN_PASSWORD} characters.
+              </span>
+            )}
+          </div>
 
           {error && (
             <p id="login-error" role="alert" className="form-error">
@@ -65,12 +116,15 @@ export function LoginScreen({ auth, onSignedIn }: { auth: Auth; onSignedIn: (s: 
             </p>
           )}
 
-          <button type="submit" className="btn btn-primary btn-block">
-            Sign in
+          <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
+            {busy ? (signup ? 'Creating account…' : 'Signing in…') : signup ? 'Create account' : 'Sign in'}
           </button>
 
-          <p className="login-note">
-            Demo build: any email with a password of {MIN_PASSWORD}+ characters signs you in. Calls are simulated.
+          <p className="login-switch">
+            {signup ? 'Already have an account?' : `New to ${brand.name}?`}{' '}
+            <button type="button" className="link-btn" onClick={() => switchMode(signup ? 'signin' : 'signup')}>
+              {signup ? 'Sign in' : 'Create an account'}
+            </button>
           </p>
         </form>
       </main>

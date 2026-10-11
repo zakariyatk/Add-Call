@@ -1,4 +1,5 @@
-import type { Session } from '../auth/session';
+import { useState, type FormEvent } from 'react';
+import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
 import type { ConnectionStatus } from '../calls/signalingClient';
 import { brand, type ThemeMode } from '../branding/brand.config';
 import { Lockup } from '../components/Logo';
@@ -33,9 +34,9 @@ export function SettingsView({
       <div className="card settings-section">
         <h2>Account</h2>
         <div className="profile">
-          <Avatar name={session.displayName} size={48} />
+          <Avatar name={session.name} size={48} />
           <span className="profile-text">
-            <span className="profile-name">{session.displayName}</span>
+            <span className="profile-name">{session.name}</span>
             <span className="profile-email">{session.email}</span>
           </span>
           <button type="button" className="btn btn-secondary" onClick={onSignOut}>
@@ -43,6 +44,8 @@ export function SettingsView({
           </button>
         </div>
       </div>
+
+      <ChangePassword />
 
       <div className="card settings-section">
         <h2>Appearance</h2>
@@ -82,5 +85,81 @@ export function SettingsView({
         </dl>
       </div>
     </section>
+  );
+}
+
+function ChangePassword() {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (next.length < MIN_PASSWORD) return setMessage({ ok: false, text: `Use at least ${MIN_PASSWORD} characters for your new password.` });
+    setBusy(true);
+    setMessage(null);
+    try {
+      await authApi.changePassword(current, next);
+      setMessage({ ok: true, text: 'Password changed. Other devices have been signed out.' });
+      setCurrent('');
+      setNext('');
+      setOpen(false);
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof AuthError ? err.message : 'Could not change your password.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card settings-section">
+      <h2>Security</h2>
+      {!open ? (
+        <div className="setting-row">
+          <span>
+            <span className="setting-label">Password</span>
+            {message?.ok ? (
+              <span className="setting-hint" role="status">
+                {message.text}
+              </span>
+            ) : (
+              <span className="setting-hint">Changing it signs you out on other devices.</span>
+            )}
+          </span>
+          <button type="button" className="btn btn-secondary" onClick={() => (setOpen(true), setMessage(null))}>
+            Change
+          </button>
+        </div>
+      ) : (
+        <form className="password-form" onSubmit={submit} noValidate>
+          <label className="field">
+            <span>Current password</span>
+            <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} autoFocus />
+          </label>
+          <label className="field">
+            <span>New password</span>
+            <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} aria-describedby="new-password-hint" />
+            <span id="new-password-hint" className="field-hint">
+              At least {MIN_PASSWORD} characters.
+            </span>
+          </label>
+          {message && !message.ok && (
+            <p role="alert" className="form-error">
+              {message.text}
+            </p>
+          )}
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => (setOpen(false), setMessage(null))}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={busy || !current || !next}>
+              {busy ? 'Saving…' : 'Change password'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 }

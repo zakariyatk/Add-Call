@@ -24,15 +24,23 @@ const browser = await chromium.launch({
 });
 const errors = [];
 
-async function user(email, password = 'secret123') {
+const run = Date.now().toString(36); // fresh accounts every run
+const PASSWORD = 'e2e-password-123';
+
+/** Creates an account through the sign-up form, in its own browser context. */
+async function user(name) {
+  const email = `${name.toLowerCase().replace(/\s+/g, '.')}.${run}@example.com`;
   const context = await browser.newContext({ permissions: ['camera', 'microphone'], viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
-  page.on('pageerror', (e) => errors.push(`${email}: ${e.message}`));
+  page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
   await page.goto(URL);
-  await page.fill('input[type=email]', email);
-  await page.fill('input[type=password]', password);
-  await page.click('button[type=submit]');
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  await page.getByLabel('Name').fill(name);
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByRole('button', { name: 'Create account' }).click();
   await page.waitForSelector('.shell');
+  page.email = email;
   return page;
 }
 
@@ -50,8 +58,13 @@ const videoFlowing = (page, selector) =>
   );
 
 try {
-  const ann = await user('ann.lee@example.com');
-  const bob = await user('bob.stone@example.com');
+  const ann = await user('Ann Lee');
+  const bob = await user('Bob Stone');
+  assert(true, 'two accounts created through the sign-up form');
+
+  await bob.reload();
+  await bob.waitForSelector('.shell');
+  assert(true, 'the session survives a page reload');
 
   await ann.goto(URL + '#/people');
   await ann.getByText('Bob Stone').waitFor();
@@ -111,6 +124,23 @@ try {
   await bob.locator('.call-status', { hasText: 'Call declined' }).waitFor();
   assert(true, 'a declined call tells the caller');
   await shot(bob, 'e2e-4-declined');
+
+  // Sign out, a wrong password, then sign back in.
+  await ann.getByRole('button', { name: 'Sign out' }).first().click();
+  await ann.getByRole('heading', { name: /Sign in to/ }).waitFor();
+  await ann.reload();
+  await ann.getByRole('heading', { name: /Sign in to/ }).waitFor();
+  assert(true, 'signing out ends the session (still signed out after reload)');
+  await ann.getByLabel('Email').fill(ann.email);
+  await ann.getByLabel('Password', { exact: true }).fill('not-the-password');
+  await ann.getByRole('button', { name: 'Sign in' }).click();
+  await ann.getByRole('alert').filter({ hasText: 'Email or password is incorrect.' }).waitFor();
+  assert(true, 'a wrong password is refused');
+  await ann.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await ann.getByRole('button', { name: 'Sign in' }).click();
+  await ann.waitForSelector('.shell');
+  await shot(ann, 'e2e-5-signed-in');
+  assert(true, 'signing in with the right password works');
 
   assert(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
   console.log('\nAll end-to-end call checks passed.');

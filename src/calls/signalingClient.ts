@@ -1,17 +1,16 @@
-import { SIGNALING_PATH, type ClientMessage, type ServerMessage, type UserInfo } from './protocol';
+import { SIGNALING_PATH, type ClientMessage, type ServerMessage } from './protocol';
 
-export type ConnectionStatus = 'connecting' | 'online' | 'offline' | 'replaced';
+export type ConnectionStatus = 'connecting' | 'online' | 'offline' | 'replaced' | 'signed-out';
 
 /**
  * WebSocket to the signaling server, with automatic reconnect (1s → 15s
- * backoff) and a hello on every (re)connect.
+ * backoff). The server identifies us from the session cookie on connect.
  */
 export class SignalingClient {
   private ws: WebSocket | null = null;
   private retry = 0;
   private timer: number | null = null;
   private stopped = true;
-  private user: UserInfo | null = null;
 
   constructor(
     private readonly onMessage: (msg: ServerMessage) => void,
@@ -19,8 +18,8 @@ export class SignalingClient {
     private readonly url = defaultUrl(),
   ) {}
 
-  start(user: UserInfo): void {
-    this.user = user;
+  start(): void {
+    if (!this.stopped) return;
     this.stopped = false;
     this.open();
   }
@@ -39,14 +38,10 @@ export class SignalingClient {
   }
 
   private open() {
-    if (this.stopped || !this.user) return;
+    if (this.stopped) return;
     this.onStatus('connecting');
     const ws = new WebSocket(this.url);
     this.ws = ws;
-    ws.onopen = () => {
-      this.retry = 0;
-      ws.send(JSON.stringify({ type: 'hello', email: this.user!.email, name: this.user!.name } satisfies ClientMessage));
-    };
     ws.onmessage = (e) => {
       let msg: ServerMessage;
       try {
@@ -54,10 +49,13 @@ export class SignalingClient {
       } catch {
         return;
       }
-      if (msg.type === 'welcome') this.onStatus('online');
-      if (msg.type === 'replaced') {
+      if (msg.type === 'welcome') {
+        this.retry = 0;
+        this.onStatus('online');
+      }
+      if (msg.type === 'replaced' || msg.type === 'signed-out') {
         this.stopped = true;
-        this.onStatus('replaced');
+        this.onStatus(msg.type);
       }
       this.onMessage(msg);
     };

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { Session } from '../auth/session';
+import type { Session } from '../auth/api';
 import { CallController, type CallPreferences } from './CallController';
 import type { CallRecord } from './types';
 
@@ -15,7 +15,7 @@ export function useCalling(session: Session | null, prefs: CallPreferences, onRe
 
   useEffect(() => {
     if (!session) return;
-    controller.connect({ email: session.email, name: session.displayName });
+    controller.connect({ email: session.email, name: session.name });
     return () => controller.disconnect();
   }, [controller, session]);
 

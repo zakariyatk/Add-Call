@@ -2,7 +2,8 @@
  * Signaling protocol shared by the browser and the server (server/signaling.ts).
  * Messages are JSON over a WebSocket at /ws. The server only introduces peers
  * and relays WebRTC offers, answers and ICE candidates; audio and video flow
- * directly between the browsers (or through TURN when configured).
+ * directly between the browsers (or through TURN when configured). The socket
+ * is authenticated by the session cookie when it opens.
  *
  * Keep this file free of imports: it is compiled for both runtimes.
  */
@@ -37,7 +38,6 @@ export type SignalData =
 export type EndReason = 'declined' | 'busy' | 'offline' | 'timeout' | 'hangup' | 'disconnected' | 'cancelled' | 'failed';
 
 export type ClientMessage =
-  | { type: 'hello'; email: string; name: string }
   | { type: 'call'; callId: string; to: string; video: boolean }
   | { type: 'accept'; callId: string }
   | { type: 'decline'; callId: string }
@@ -54,6 +54,8 @@ export type ServerMessage =
   | { type: 'signal'; callId: string; data: SignalData }
   /** Another tab or device signed in with the same address. */
   | { type: 'replaced' }
+  /** This login session ended (signed out elsewhere, password changed). */
+  | { type: 'signed-out' }
   | { type: 'error'; message: string };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -88,10 +90,6 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   }
   if (!m || typeof m !== 'object') return null;
   switch (m.type) {
-    case 'hello':
-      return isEmail(m.email) && typeof m.name === 'string' && m.name.length <= 80
-        ? { type: 'hello', email: m.email.toLowerCase(), name: m.name.trim() || m.email }
-        : null;
     case 'call':
       return isId(m.callId) && isEmail(m.to) && typeof m.video === 'boolean'
         ? { type: 'call', callId: m.callId, to: m.to.toLowerCase(), video: m.video }

@@ -5,7 +5,6 @@ const p = (m: unknown) => parseClientMessage(typeof m === 'string' ? m : JSON.st
 
 describe('parseClientMessage', () => {
   it('accepts well-formed messages and normalises addresses', () => {
-    expect(p({ type: 'hello', email: 'A@B.co', name: ' Ann ' })).toEqual({ type: 'hello', email: 'a@b.co', name: 'Ann' });
     expect(p({ type: 'call', callId: 'abcdef12', to: 'X@Y.io', video: true })).toEqual({ type: 'call', callId: 'abcdef12', to: 'x@y.io', video: true });
     expect(p({ type: 'hangup', callId: 'abcdef12' })).toEqual({ type: 'hangup', callId: 'abcdef12' });
     expect(p({ type: 'signal', callId: 'abcdef12', data: { sdp: { type: 'offer', sdp: 'v=0' } } })).not.toBeNull();
@@ -18,8 +17,8 @@ describe('parseClientMessage', () => {
       'not json',
       'null',
       { type: 'nope' },
-      { type: 'hello', email: 'not-an-email', name: 'x' },
-      { type: 'hello', email: 'a@b.co', name: 'x'.repeat(81) },
+      // Identity comes from the session cookie; clients can't claim one.
+      { type: 'hello', email: 'a@b.co', name: 'Ann' },
       { type: 'call', callId: '../../etc', to: 'a@b.co', video: false },
       { type: 'call', callId: 'abcdef12', to: 'a@b.co' },
       { type: 'signal', callId: 'abcdef12', data: { sdp: { type: 'pranswer', sdp: '' } } },

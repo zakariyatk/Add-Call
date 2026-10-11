@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Session } from '../auth/session';
+import type { Session } from '../auth/api';
 import type { ConnectionStatus } from '../calls/signalingClient';
 import { brand } from '../branding/brand.config';
 import { Icon } from './Icon';
@@ -13,6 +13,7 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
   connecting: 'Connecting…',
   offline: 'Offline',
   replaced: 'Open in another tab',
+  'signed-out': 'Signed out',
 };
 
 export function AppShell({
@@ -65,11 +66,11 @@ export function AppShell({
         <nav aria-label="Main">{navItems('side')}</nav>
         <div className="sidebar-user">
           <span className="presence-avatar" title={STATUS_LABEL[connection]}>
-            <Avatar name={session.displayName} size={34} />
+            <Avatar name={session.name} size={34} />
             <span className={`presence-dot is-${connection}`} aria-hidden="true" />
           </span>
           <span className="sidebar-user-text">
-            <span className="sidebar-user-name">{session.displayName}</span>
+            <span className="sidebar-user-name">{session.name}</span>
             <span className="sidebar-user-email">{STATUS_LABEL[connection]}</span>
           </span>
           <button type="button" className="icon-btn" onClick={onSignOut} aria-label="Sign out" title="Sign out">

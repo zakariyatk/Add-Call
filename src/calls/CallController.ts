@@ -65,7 +65,8 @@ export class CallController {
   constructor(private readonly onRecord: (r: CallRecord) => void) {
     this.signaling = new SignalingClient(
       (m) => this.onServerMessage(m),
-      (connection) => this.set({ connection, ...(connection === 'replaced' ? { notice: `${brand.name} was opened in another tab or device.` } : {}) }),
+      (connection) =>
+        this.set({ connection, ...(connection === 'replaced' ? { notice: `${brand.name} was opened in another tab or device.` } : {}) }),
     );
   }
 
@@ -92,7 +93,7 @@ export class CallController {
   // ----- lifecycle -----
   connect(user: UserInfo) {
     this.me = user;
-    this.signaling.start(user);
+    this.signaling.start();
   }
 
   disconnect() {

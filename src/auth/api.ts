@@ -1,0 +1,61 @@
+import { brand } from '../branding/brand.config';
+
+/*
+ * Client for the accounts API (server/auth.ts). The session lives in an
+ * HttpOnly cookie the browser sends automatically — JavaScript never sees it.
+ */
+
+export interface Session {
+  email: string;
+  name: string;
+}
+
+/** Must match MIN_PASSWORD in server/auth.ts (the server is the authority). */
+export const MIN_PASSWORD = 8;
+
+export class AuthError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+async function request(path: string, init: { method?: string; body?: unknown } = {}): Promise<unknown> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: init.method ?? 'GET',
+      credentials: 'same-origin',
+      headers: init.body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    });
+  } catch {
+    throw new AuthError(`Can't reach ${brand.name}. Check your connection and try again.`, 0);
+  }
+  if (res.status === 204) return null;
+  const data = (await res.json().catch(() => ({}))) as { error?: string; user?: Session };
+  if (!res.ok) throw new AuthError(data.error ?? 'Something went wrong. Please try again.', res.status);
+  return data;
+}
+
+const user = (data: unknown) => (data as { user: Session }).user;
+
+export const authApi = {
+  /** The signed-in user, or null when signed out. */
+  async me(): Promise<Session | null> {
+    try {
+      return user(await request('/api/auth/me'));
+    } catch (e) {
+      if (e instanceof AuthError && e.status === 401) return null;
+      throw e;
+    }
+  },
+  signIn: async (email: string, password: string) => user(await request('/api/auth/login', { method: 'POST', body: { email, password } })),
+  signUp: async (name: string, email: string, password: string) =>
+    user(await request('/api/auth/signup', { method: 'POST', body: { name, email, password } })),
+  signOut: async () => void (await request('/api/auth/logout', { method: 'POST', body: {} })),
+  changePassword: async (currentPassword: string, newPassword: string) =>
+    void (await request('/api/auth/password', { method: 'POST', body: { currentPassword, newPassword } })),
+};

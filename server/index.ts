@@ -2,11 +2,11 @@ import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { brand } from '../src/branding/brand.config.ts';
-import { createSignaling, iceServersFromEnv } from './signaling.ts';
+import { createBackend } from './app.ts';
 
 /*
- * Production server: serves the built app from dist/ and the signaling
- * WebSocket at /ws on the same port.
+ * Production server: serves the built app from dist/, the accounts API at
+ * /api/auth/* and the signaling WebSocket at /ws, all on one port.
  *   npm run build && npm start        (PORT, TURN_URL, … — see README)
  * Browsers only allow camera and microphone on HTTPS (or localhost), so run
  * this behind a TLS-terminating proxy in production.
@@ -51,7 +51,11 @@ function fileFor(urlPath: string): string | null {
   }
 }
 
-const server = createServer((req, res) => {
+const backend = createBackend({ databasePath: process.env.DATABASE_PATH ?? 'data/addcall.db' });
+
+const server = createServer(async (req, res) => {
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+  if (await backend.handleApi(req, res)) return;
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, SECURITY_HEADERS).end();
     return;
@@ -59,7 +63,7 @@ const server = createServer((req, res) => {
   const path = (req.url ?? '/').split('?')[0];
   if (path === '/healthz') {
     res.writeHead(200, { 'Content-Type': 'application/json', ...SECURITY_HEADERS });
-    res.end(JSON.stringify({ ok: true, name: brand.name, ...signaling.stats() }));
+    res.end(JSON.stringify({ ok: true, name: brand.name, ...backend.stats() }));
     return;
   }
   // Unknown paths fall back to the app shell (client-side routing).
@@ -76,16 +80,12 @@ const server = createServer((req, res) => {
     .pipe(res);
 });
 
-const signaling = createSignaling({
-  iceServers: iceServersFromEnv(),
-  allowedOrigins: process.env.ALLOWED_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean),
-});
-signaling.attach(server);
+backend.attach(server);
 
 server.listen(port, () => console.log(`${brand.name} listening on http://localhost:${port}`));
 
 const shutdown = () => {
-  signaling.close();
+  backend.close();
   server.close(() => process.exit(0));
 };
 process.on('SIGTERM', shutdown);

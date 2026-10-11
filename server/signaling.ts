@@ -17,12 +17,20 @@ import {
  * WebRTC signaling: presence, call invitations and relaying of SDP / ICE
  * between the two parties of a call. It never sees audio or video.
  *
- * Identity is whatever address the browser signs in with — this matches the
- * app's demo sign-in. Put real authentication in front of it (verify a session
- * token in `hello`) before exposing it publicly.
+ * Every connection is authenticated from the session cookie on the WebSocket
+ * upgrade (see `authenticate`), so a browser can only appear as the account it
+ * is signed in to. Unauthenticated upgrades get 401.
  */
 
+export interface Identity {
+  user: UserInfo;
+  /** Which login session this connection belongs to (for sign-out). */
+  sessionId: string;
+}
+
 export interface SignalingOptions {
+  /** Resolves the signed-in user for an upgrade request, or null to refuse it. */
+  authenticate: (req: IncomingMessage) => Identity | null;
   iceServers?: IceServer[];
   ringTimeoutMs?: number;
   /** Extra origins allowed to connect, besides the page's own host. */
@@ -32,6 +40,7 @@ export interface SignalingOptions {
 interface Client {
   ws: WebSocket;
   user: UserInfo | null;
+  sessionId: string;
   callId: string | null;
   alive: boolean;
   /** Message budget for the current rate-limit window. */
@@ -74,7 +83,7 @@ function originAllowed(req: IncomingMessage, extra: string[]): boolean {
   }
 }
 
-export function createSignaling(opts: SignalingOptions = {}) {
+export function createSignaling(opts: SignalingOptions) {
   const iceServers = opts.iceServers ?? DEFAULT_ICE_SERVERS;
   const ringTimeout = opts.ringTimeoutMs ?? RING_TIMEOUT_MS;
   const allowedOrigins = opts.allowedOrigins ?? [];
@@ -109,26 +118,28 @@ export function createSignaling(opts: SignalingOptions = {}) {
 
   const otherParty = (call: Call, email: string) => byEmail.get(call.caller === email ? call.callee : call.caller);
 
-  function handle(client: Client, msg: ClientMessage) {
-    if (msg.type === 'hello') {
-      if (client.user) return;
-      const previous = byEmail.get(msg.email);
-      if (previous && previous !== client) {
-        const call = previous.callId ? calls.get(previous.callId) : undefined;
-        if (call) endCall(call, 'disconnected');
-        send(previous, { type: 'replaced' });
-        previous.user = null;
-        previous.ws.close(4000, 'replaced');
-      }
-      client.user = { email: msg.email, name: msg.name };
-      byEmail.set(msg.email, client);
-      send(client, { type: 'welcome', you: client.user, iceServers });
-      broadcastPresence();
-      return;
-    }
+  /** Disconnects a client (its call ends) with a final message. */
+  function evict(c: Client, msg: ServerMessage, code: number) {
+    const call = c.callId ? calls.get(c.callId) : undefined;
+    if (call) endCall(call, 'disconnected');
+    send(c, msg);
+    if (c.user && byEmail.get(c.user.email) === c) byEmail.delete(c.user.email);
+    c.user = null;
+    c.ws.close(code, msg.type);
+  }
 
+  function register(client: Client, identity: Identity) {
+    const previous = byEmail.get(identity.user.email);
+    if (previous && previous !== client) evict(previous, { type: 'replaced' }, 4000);
+    client.user = identity.user;
+    byEmail.set(identity.user.email, client);
+    send(client, { type: 'welcome', you: client.user, iceServers });
+    broadcastPresence();
+  }
+
+  function handle(client: Client, msg: ClientMessage) {
     const me = client.user;
-    if (!me) return send(client, { type: 'error', message: 'Say hello first.' });
+    if (!me) return;
 
     if (msg.type === 'call') {
       if (client.callId) return send(client, { type: 'error', message: 'You are already in a call.' });
@@ -171,9 +182,10 @@ export function createSignaling(opts: SignalingOptions = {}) {
     }
   }
 
-  wss.on('connection', (ws) => {
-    const client: Client = { ws, user: null, callId: null, alive: true, budget: RATE_LIMIT };
+  wss.on('connection', (ws: WebSocket, _req: IncomingMessage, identity: Identity) => {
+    const client: Client = { ws, user: null, sessionId: identity.sessionId, callId: null, alive: true, budget: RATE_LIMIT };
     connections.add(client);
+    register(client, identity);
     ws.on('pong', () => (client.alive = true));
     ws.on('message', (raw, isBinary) => {
       if (--client.budget < 0) return ws.close(1008, 'rate limit');
@@ -213,12 +225,14 @@ export function createSignaling(opts: SignalingOptions = {}) {
     server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
       const path = (req.url ?? '').split('?')[0];
       if (path !== SIGNALING_PATH) return;
-      if (!originAllowed(req, allowedOrigins)) {
-        socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      const refuse = (status: string) => {
+        socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
         socket.destroy();
-        return;
-      }
-      wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+      };
+      if (!originAllowed(req, allowedOrigins)) return refuse('403 Forbidden');
+      const identity = opts.authenticate(req);
+      if (!identity) return refuse('401 Unauthorized');
+      wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req, identity));
     });
   }
 
@@ -230,5 +244,13 @@ export function createSignaling(opts: SignalingOptions = {}) {
     wss.close();
   }
 
-  return { attach, close, stats: () => ({ online: byEmail.size, calls: calls.size }) };
+  /** Closes connections whose login session ended (sign-out, password change). */
+  function revoke(sel: string[] | { userEmail: string; except?: string }) {
+    for (const c of [...connections]) {
+      const hit = Array.isArray(sel) ? sel.includes(c.sessionId) : c.user?.email === sel.userEmail && c.sessionId !== sel.except;
+      if (hit) evict(c, { type: 'signed-out' }, 4001);
+    }
+  }
+
+  return { attach, close, revoke, stats: () => ({ online: byEmail.size, calls: calls.size }) };
 }

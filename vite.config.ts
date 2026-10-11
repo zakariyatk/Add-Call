@@ -1,26 +1,34 @@
 /// <reference types="vitest/config" />
-import { defineConfig, type Plugin } from 'vite';
+import type { Server } from 'node:http';
+import { defineConfig, type Connect, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { brandPlugin } from './vite.brand';
-import { createSignaling, iceServersFromEnv } from './server/signaling.ts';
+import { createBackend } from './server/app.ts';
 
-/** Runs the signaling WebSocket (/ws) inside `vite` and `vite preview`, so one command starts everything. */
-function signalingPlugin(): Plugin {
-  const attach = (httpServer: Parameters<ReturnType<typeof createSignaling>['attach']>[0] | null) => {
-    if (!httpServer) return;
-    const signaling = createSignaling({ iceServers: iceServersFromEnv() });
-    signaling.attach(httpServer);
-    httpServer.on('close', () => signaling.close());
+/**
+ * Runs the backend (accounts API + signaling) inside `vite` and `vite preview`,
+ * so one command starts everything. Dev accounts live in data/dev.db.
+ */
+function backendPlugin(): Plugin {
+  const mount = (middlewares: Connect.Server, httpServer: Server | null) => {
+    const backend = createBackend({ databasePath: process.env.DATABASE_PATH ?? 'data/dev.db' });
+    middlewares.use((req, res, next) => {
+      backend.handleApi(req, res).then((handled) => handled || next(), next);
+    });
+    if (httpServer) {
+      backend.attach(httpServer);
+      httpServer.on('close', () => backend.close());
+    }
   };
   return {
-    name: 'add-call-signaling',
-    configureServer: (server) => attach(server.httpServer as never),
-    configurePreviewServer: (server) => attach(server.httpServer as never),
+    name: 'add-call-backend',
+    configureServer: (server) => mount(server.middlewares, server.httpServer as Server | null),
+    configurePreviewServer: (server) => mount(server.middlewares, server.httpServer as Server | null),
   };
 }
 
 export default defineConfig({
-  plugins: [react(), brandPlugin(), signalingPlugin()],
+  plugins: [react(), brandPlugin(), backendPlugin()],
   server: { port: 5174 },
   preview: { port: 4174 },
   build: { outDir: 'dist', sourcemap: true },

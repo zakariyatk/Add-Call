@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && tsc -p tsconfig.server.json",
-    "start": "node build/server/index.js",
+    "start": "node --disable-warning=ExperimentalWarning build/server/index.js",
     "preview": "vite preview",
     "typecheck": "tsc -b && tsc -p tsconfig.server.json --noEmit",
     "lint": "eslint .",
@@ -40,6 +40,6 @@
     "vitest": "3.2.4"
   },
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.13"
   }
 }
