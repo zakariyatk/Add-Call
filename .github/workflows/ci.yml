@@ -27,10 +27,12 @@ jobs:
           retention-days: 7
 
   # Uploads the built app to Hostinger (call.adddots.com) after every push to main.
+  # Pushes to other branches do a dry run: they log in over FTP and list what
+  # would change, without touching the site (a quick check that the secrets work).
   # Needs repository secrets FTP_SERVER, FTP_USERNAME and FTP_PASSWORD (see README).
   deploy:
     needs: check
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -61,3 +63,5 @@ jobs:
           # The FTP account's folder for call.adddots.com (./ when the account opens there).
           server-dir: ${{ vars.FTP_SERVER_DIR || './' }}
           dangerous-clean-slate: false
+          dry-run: ${{ github.ref != 'refs/heads/main' }}
+          log-level: verbose
