@@ -45,17 +45,34 @@ jobs:
         with:
           name: dist
           path: dist
+      # Accepts FTP_SERVER pasted as "ftp://host:21/" or with stray spaces, and
+      # says what's wrong (without printing the secret) if it still isn't a host name.
       - name: Check FTP secrets
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
-          if [ -z "$FTP_SERVER" ]; then
+          if [ -z "$FTP_SERVER" ] || [ -z "$FTP_USERNAME" ] || [ -z "$FTP_PASSWORD" ]; then
             echo "::error::Add the FTP_SERVER, FTP_USERNAME and FTP_PASSWORD secrets to deploy (see README)."
             exit 1
           fi
+          host=$(printf '%s' "$FTP_SERVER" | tr -d '[:space:]')
+          case "$host" in *://*) echo "::notice::FTP_SERVER started with a scheme (ftp:// or similar); removed it."; host=${host#*://} ;; esac
+          host=${host%%/*}
+          case "$host" in *:*) echo "::notice::FTP_SERVER had a port; removed it."; host=${host%%:*} ;; esac
+          echo "::add-mask::$host"
+          echo "::notice::FTP_SERVER (cleaned) is ${#host} characters, starting with '${host:0:1}' and ending with '${host: -1}'."
+          if ! getent hosts "$host" > /dev/null; then
+            echo "::error::FTP_SERVER is not a host name that exists. Use the FTP hostname or IP from hPanel → Files → FTP Accounts, e.g. ftp.adddots.com — nothing else."
+            exit 1
+          fi
+          echo "FTP_SERVER resolves. Connecting…"
+          # Step outputs drop masked values, so hand it on as an environment variable.
+          echo "FTP_HOST=$host" >> "$GITHUB_ENV"
       - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }}
+          server: ${{ env.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
