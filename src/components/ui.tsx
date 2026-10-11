@@ -11,9 +11,19 @@ export function Avatar({ name, size = 40 }: { name: string | null; size?: number
   );
 }
 
-export function CallButton({ label, onClick, size = 'md' }: { label: string; onClick: () => void; size?: 'md' | 'lg' }) {
+export function CallButton({
+  label,
+  onClick,
+  size = 'md',
+  disabled,
+}: {
+  label: string;
+  onClick: () => void;
+  size?: 'md' | 'lg';
+  disabled?: boolean;
+}) {
   return (
-    <button type="button" className={`call-btn call-btn-${size}`} onClick={onClick} aria-label={label} title={label}>
+    <button type="button" className={`call-btn call-btn-${size}`} onClick={onClick} aria-label={label} title={label} disabled={disabled}>
       <Icon name="phone" size={size === 'lg' ? 26 : 18} />
     </button>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, formatPhone, formatRelative, initials, isDialable, normalizeNumber } from './format';
+import { formatDuration, formatRelative, initials } from './format';
 
 describe('formatDuration', () => {
   it.each([
@@ -9,27 +9,6 @@ describe('formatDuration', () => {
     [3723, '1:02:03'],
     [-4, '0:00'],
   ])('%i s → %s', (s, out) => expect(formatDuration(s)).toBe(out));
-});
-
-describe('phone numbers', () => {
-  it('normalises input, keeping a leading + and keypad symbols', () => {
-    expect(normalizeNumber(' +91 98765-43210 ')).toBe('+919876543210');
-    expect(normalizeNumber('(415) 555 0132')).toBe('4155550132');
-    expect(normalizeNumber('*123#')).toBe('*123#');
-  });
-
-  it('formats common shapes', () => {
-    expect(formatPhone('+919876543210')).toBe('+91 98765 43210');
-    expect(formatPhone('+14155550132')).toBe('+1 415 555 0132');
-    expect(formatPhone('9876543210')).toBe('98765 43210');
-    expect(formatPhone('+4420')).toBe('+4420');
-  });
-
-  it('needs three digits to dial', () => {
-    expect(isDialable('12')).toBe(false);
-    expect(isDialable('+1 2')).toBe(false);
-    expect(isDialable('100')).toBe(true);
-  });
 });
 
 describe('formatRelative', () => {

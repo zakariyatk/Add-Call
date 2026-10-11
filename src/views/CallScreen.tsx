@@ -1,91 +1,154 @@
 import { useEffect, useRef } from 'react';
 import { brand } from '../branding/brand.config';
-import { connectedSeconds, type CallControl, type CallState } from '../calls/callMachine';
+import { connectedSeconds, endReasonText, type CallState } from '../calls/callMachine';
 import { Icon, type IconName } from '../components/Icon';
 import { LogoMark } from '../components/Logo';
 import { Avatar } from '../components/ui';
-import { formatDuration, formatPhone } from '../lib/format';
+import { formatDuration } from '../lib/format';
 
 function statusText(state: CallState, now: number): string {
   switch (state.status) {
-    case 'dialing':
+    case 'calling':
       return 'Calling…';
     case 'ringing':
       return 'Ringing…';
+    case 'incoming':
+      return state.videoRequested ? 'Incoming video call' : 'Incoming call';
+    case 'connecting':
+      return 'Connecting…';
     case 'connected':
       return formatDuration(connectedSeconds(state, now));
     case 'ended':
-      return state.connectedAt ? `Call ended · ${formatDuration(connectedSeconds(state, now))}` : 'Call ended';
+      return state.connectedAt ? `${endReasonText(state)} · ${formatDuration(connectedSeconds(state, now))}` : endReasonText(state);
     default:
       return '';
   }
 }
 
-const CONTROLS: { control: CallControl; on: IconName; off: IconName; label: string }[] = [
-  { control: 'muted', on: 'micOff', off: 'mic', label: 'Mute' },
-  { control: 'speaker', on: 'speaker', off: 'speaker', label: 'Speaker' },
-  { control: 'video', on: 'video', off: 'videoOff', label: 'Video' },
-];
+/** Binds a MediaStream to a <video>; remote audio plays through it too. */
+function StreamVideo({ stream, muted, className }: { stream: MediaStream; muted: boolean; className: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (el.srcObject !== stream) el.srcObject = stream;
+    void el.play().catch(() => {});
+  });
+  return <video ref={ref} className={className} autoPlay playsInline muted={muted} />;
+}
+
+function Control({
+  icon,
+  label,
+  pressed,
+  onClick,
+  variant,
+  disabled,
+}: {
+  icon: IconName;
+  label: string;
+  pressed?: boolean;
+  onClick: () => void;
+  variant?: 'end' | 'accept';
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`call-control ${variant ? `call-${variant}` : ''}`}
+      aria-pressed={pressed}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className="call-control-icon">
+        <Icon name={icon} size={variant ? 26 : 24} />
+      </span>
+      <span>{label}</span>
+    </button>
+  );
+}
 
 export function CallScreen({
   state,
   now,
-  onToggle,
+  localStream,
+  remoteStream,
+  onAccept,
+  onDecline,
   onHangUp,
+  onToggleMute,
+  onToggleVideo,
 }: {
   state: CallState;
   now: number;
-  onToggle: (c: CallControl) => void;
+  localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
+  onAccept: (video: boolean) => void;
+  onDecline: () => void;
   onHangUp: () => void;
+  onToggleMute: () => void;
+  onToggleVideo: () => void;
 }) {
-  const endRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => endRef.current?.focus(), []);
+  // Focus Accept for an incoming call, End otherwise, so the keyboard lands on the likely action.
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const incoming = state.status === 'incoming';
+  useEffect(() => {
+    const buttons = controlsRef.current?.querySelectorAll<HTMLButtonElement>(incoming ? '.call-accept' : '.call-end');
+    buttons?.[buttons.length - 1]?.focus();
+  }, [incoming]);
 
   if (!state.peer) return null;
-  const title = state.peer.name ?? formatPhone(state.peer.number);
   const ended = state.status === 'ended';
+  const showRemoteVideo = !!remoteStream && state.remoteVideo && state.status === 'connected';
+  const showSelfView = !!localStream && state.video && localStream.getVideoTracks().length > 0;
 
   return (
-    <div className="call-screen always-dark" role="dialog" aria-modal="true" aria-label={`Call with ${title}`}>
+    <div
+      className={`call-screen always-dark ${showRemoteVideo ? 'has-video' : ''}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Call with ${state.peer.name}`}
+    >
+      {/* Remote audio (and video) always plays through this element. */}
+      {remoteStream && (
+        <StreamVideo stream={remoteStream} muted={false} className={showRemoteVideo ? 'remote-video' : 'remote-video is-hidden'} />
+      )}
+      {showSelfView && <StreamVideo stream={localStream} muted className="self-view" />}
+
       <div className="call-brand">
         <LogoMark size={22} />
         <span>{brand.name}</span>
       </div>
 
       <div className="call-peer">
-        <div className={`call-avatar ${state.status === 'dialing' || state.status === 'ringing' ? 'is-pulsing' : ''}`}>
-          <Avatar name={state.peer.name} size={112} />
-        </div>
-        <h1>{title}</h1>
-        {state.peer.name && <p className="call-number">{formatPhone(state.peer.number)}</p>}
-        <p className="call-status" aria-live="polite">{statusText(state, now)}</p>
+        {!showRemoteVideo && (
+          <div className={`call-avatar ${['calling', 'ringing', 'incoming'].includes(state.status) ? 'is-pulsing' : ''}`}>
+            <Avatar name={state.peer.name} size={112} />
+          </div>
+        )}
+        <h1>{state.peer.name}</h1>
+        {state.peer.name !== state.peer.email && <p className="call-number">{state.peer.email}</p>}
+        <p className="call-status" aria-live="polite">
+          {statusText(state, now)}
+          {state.status === 'connected' && state.remoteMuted && <span className="call-flag"> · {state.peer.name.split(' ')[0]} is muted</span>}
+        </p>
       </div>
 
-      <div className="call-controls">
-        {CONTROLS.map((c) => {
-          const active = state[c.control];
-          return (
-            <button
-              key={c.control}
-              type="button"
-              className="call-control"
-              aria-pressed={active}
-              disabled={ended}
-              onClick={() => onToggle(c.control)}
-            >
-              <span className="call-control-icon">
-                <Icon name={active ? c.on : c.off} size={24} />
-              </span>
-              <span>{c.label}</span>
-            </button>
-          );
-        })}
-        <button ref={endRef} type="button" className="call-control call-end" onClick={onHangUp} disabled={ended} aria-label="End call">
-          <span className="call-control-icon">
-            <Icon name="phoneOff" size={26} />
-          </span>
-          <span>End</span>
-        </button>
+      <div className="call-controls" ref={controlsRef}>
+        {state.status === 'incoming' ? (
+          <>
+            <Control icon="phoneOff" label="Decline" variant="end" onClick={onDecline} />
+            {state.videoRequested && <Control icon="video" label="Video" variant="accept" onClick={() => onAccept(true)} />}
+            <Control icon="phone" label="Accept" variant="accept" onClick={() => onAccept(false)} />
+          </>
+        ) : (
+          <>
+            <Control icon={state.muted ? 'micOff' : 'mic'} label={state.muted ? 'Unmute' : 'Mute'} pressed={state.muted} onClick={onToggleMute} disabled={ended || !localStream} />
+            <Control icon={state.video ? 'video' : 'videoOff'} label="Camera" pressed={state.video} onClick={onToggleVideo} disabled={ended || !localStream} />
+            <Control icon="phoneOff" label="End" variant="end" onClick={onHangUp} disabled={ended} />
+          </>
+        )}
       </div>
     </div>
   );

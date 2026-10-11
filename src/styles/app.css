@@ -464,7 +464,7 @@ button {
 
 @media (max-width: 760px) {
   .shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1fr auto;
   }
   .sidebar {
@@ -486,7 +486,7 @@ button {
   }
   .tabbar {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     position: sticky;
     bottom: 0;
     z-index: 5;
@@ -552,11 +552,16 @@ button {
   color: var(--danger);
 }
 .list-sub {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+  display: block;
   font-size: 13px;
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.list-sub .dir {
+  vertical-align: -2px;
+  margin-right: 5px;
 }
 .list-meta {
   font-size: 13px;
@@ -564,7 +569,7 @@ button {
   white-space: nowrap;
 }
 .dir {
-  display: inline-grid;
+  display: inline-block;
 }
 .dir-missed {
   color: var(--danger);
@@ -605,80 +610,6 @@ button {
   padding: 48px 16px;
   text-align: center;
   color: var(--text-muted);
-}
-
-/* ---------- keypad ---------- */
-
-.keypad-view {
-  max-width: 420px;
-}
-.keypad-card {
-  padding: 28px 28px 24px;
-}
-.dial-display {
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  min-height: 72px;
-  margin-bottom: 18px;
-}
-.dial-number {
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  word-break: break-all;
-}
-.dial-number .muted {
-  font-size: 18px;
-  font-weight: 400;
-}
-.dial-match {
-  font-size: 13px;
-  color: var(--accent);
-  font-weight: 600;
-}
-.keypad {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px 18px;
-  justify-items: center;
-}
-.key {
-  width: 72px;
-  height: 72px;
-  border-radius: 999px;
-  border: 0;
-  background: var(--surface-muted);
-  display: grid;
-  place-content: center;
-  gap: 0;
-  transition: background-color 0.12s, transform 0.08s;
-}
-.key:hover {
-  background: color-mix(in srgb, var(--surface-muted) 70%, var(--border));
-}
-.key:active {
-  transform: scale(0.95);
-}
-.key-digit {
-  font-size: 26px;
-  font-weight: 500;
-  line-height: 1.1;
-}
-.key-sub {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--text-muted);
-}
-.keypad-actions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  justify-items: center;
-  align-items: center;
-  margin-top: 20px;
 }
 
 /* ---------- settings ---------- */
@@ -885,7 +816,140 @@ button {
   background: var(--danger);
   color: var(--danger-ink);
 }
+.call-accept .call-control-icon,
+.call-accept:hover .call-control-icon {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
 .call-control:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* ---------- real calls ---------- */
+
+.call-btn:disabled,
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  font-size: 14px;
+}
+
+.dial-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+.dial-actions {
+  display: flex;
+  gap: 8px;
+}
+.dial-form .form-error {
+  grid-column: 1 / -1;
+}
+@media (max-width: 560px) {
+  .dial-form {
+    grid-template-columns: 1fr;
+  }
+  .dial-actions .btn {
+    flex: 1;
+  }
+}
+
+.presence-avatar {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+}
+.presence-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid var(--surface);
+  background: var(--accent);
+}
+.presence-dot.is-busy,
+.presence-dot.is-connecting {
+  background: var(--text-muted);
+}
+.presence-dot.is-offline,
+.presence-dot.is-replaced {
+  background: var(--border);
+}
+
+.status-pill {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+}
+.status-pill.is-online {
+  color: var(--accent);
+}
+
+.remote-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--background);
+}
+.remote-video.is-hidden {
+  /* Keeps playing remote audio while the avatar is shown. */
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.self-view {
+  position: absolute;
+  z-index: 2;
+  right: 16px;
+  top: 16px;
+  width: clamp(110px, 18vw, 220px);
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  transform: scaleX(-1); /* mirror, like a camera app */
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+}
+.call-screen > :not(video) {
+  position: relative;
+  z-index: 1;
+}
+.call-screen.has-video .call-peer {
+  align-self: end;
+  margin-bottom: 24px;
+  text-shadow: 0 1px 12px rgb(0 0 0 / 0.6);
+}
+.call-screen.has-video .call-peer h1 {
+  font-size: 22px;
+  margin-top: 0;
+}
+.call-flag {
+  color: var(--text-muted);
 }

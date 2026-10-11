@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Session } from '../auth/session';
+import type { ConnectionStatus } from '../calls/signalingClient';
 import { brand } from '../branding/brand.config';
 import { Icon } from './Icon';
 import { Lockup } from './Logo';
@@ -7,12 +8,20 @@ import { NAV, type ViewId } from './nav';
 import { Avatar } from './ui';
 
 
+const STATUS_LABEL: Record<ConnectionStatus, string> = {
+  online: 'Online',
+  connecting: 'Connecting…',
+  offline: 'Offline',
+  replaced: 'Open in another tab',
+};
+
 export function AppShell({
   view,
   onNavigate,
   session,
   onSignOut,
   missedCount,
+  connection,
   children,
 }: {
   view: ViewId;
@@ -20,6 +29,7 @@ export function AppShell({
   session: Session;
   onSignOut: () => void;
   missedCount: number;
+  connection: ConnectionStatus;
   children: ReactNode;
 }) {
   const navItems = (variant: 'side' | 'tab') =>
@@ -54,10 +64,13 @@ export function AppShell({
         </a>
         <nav aria-label="Main">{navItems('side')}</nav>
         <div className="sidebar-user">
-          <Avatar name={session.displayName} size={34} />
+          <span className="presence-avatar" title={STATUS_LABEL[connection]}>
+            <Avatar name={session.displayName} size={34} />
+            <span className={`presence-dot is-${connection}`} aria-hidden="true" />
+          </span>
           <span className="sidebar-user-text">
             <span className="sidebar-user-name">{session.displayName}</span>
-            <span className="sidebar-user-email">{session.email}</span>
+            <span className="sidebar-user-email">{STATUS_LABEL[connection]}</span>
           </span>
           <button type="button" className="icon-btn" onClick={onSignOut} aria-label="Sign out" title="Sign out">
             <Icon name="logout" size={18} />
@@ -67,6 +80,7 @@ export function AppShell({
 
       <header className="topbar">
         <Lockup size={28} />
+        <span className={`status-pill is-${connection}`}>{STATUS_LABEL[connection]}</span>
       </header>
 
       <main className="content" id="main">

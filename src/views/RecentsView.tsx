@@ -1,14 +1,22 @@
 import { useState } from 'react';
 import { Icon } from '../components/Icon';
 import { Avatar, CallButton, EmptyState, PageHeader } from '../components/ui';
-import { formatDuration, formatPhone, formatRelative } from '../lib/format';
+import { formatDuration, formatRelative } from '../lib/format';
 import type { CallRecord, Peer } from '../calls/types';
 
 const DIRECTION_LABEL = { incoming: 'Incoming', outgoing: 'Outgoing', missed: 'Missed' } as const;
 
-export function RecentsView({ recents, now, onCall }: { recents: CallRecord[]; now: number; onCall: (p: Peer) => void }) {
+export function RecentsView({
+  recents,
+  now,
+  onCall,
+}: {
+  recents: CallRecord[];
+  now: number;
+  onCall: (p: Peer, video: boolean) => void;
+}) {
   const [filter, setFilter] = useState<'all' | 'missed'>('all');
-  const rows = [...recents].sort((a, b) => b.at - a.at).filter((r) => filter === 'all' || r.direction === 'missed');
+  const rows = recents.filter((r) => filter === 'all' || r.direction === 'missed');
 
   return (
     <section>
@@ -23,14 +31,14 @@ export function RecentsView({ recents, now, onCall }: { recents: CallRecord[]; n
       </PageHeader>
 
       {rows.length === 0 ? (
-        <EmptyState>{filter === 'missed' ? 'No missed calls.' : 'No calls yet. Start one from Contacts or the Keypad.'}</EmptyState>
+        <EmptyState>{filter === 'missed' ? 'No missed calls.' : 'No calls yet. Start one from People.'}</EmptyState>
       ) : (
         <ul className="list card">
           {rows.map((r) => (
             <li key={r.id} className="list-row">
-              <Avatar name={r.name} />
+              <Avatar name={r.peer.name} />
               <span className="list-main">
-                <span className={`list-title ${r.direction === 'missed' ? 'is-missed' : ''}`}>{r.name ?? formatPhone(r.number)}</span>
+                <span className={`list-title ${r.direction === 'missed' ? 'is-missed' : ''}`}>{r.peer.name}</span>
                 <span className="list-sub">
                   <span className={`dir dir-${r.direction}`}>
                     <Icon name={r.direction} size={14} />
@@ -41,7 +49,7 @@ export function RecentsView({ recents, now, onCall }: { recents: CallRecord[]; n
                 </span>
               </span>
               <span className="list-meta">{formatRelative(r.at, now)}</span>
-              <CallButton label={`Call ${r.name ?? formatPhone(r.number)}`} onClick={() => onCall({ name: r.name, number: r.number })} />
+              <CallButton label={`Call ${r.peer.name}`} onClick={() => onCall(r.peer, r.video)} />
             </li>
           ))}
         </ul>

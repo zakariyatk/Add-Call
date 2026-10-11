@@ -41,7 +41,7 @@ Electric Violet**.
 | --- | --- | --- | --- |
 | `background` | `#FAFAFA` | `#0A0A0A` | page |
 | `surface` | `#FFFFFF` | `#141415` | cards, sidebar, inputs |
-| `surfaceMuted` | `#F2F2F3` | `#1E1E20` | hover, keypad keys, segmented controls |
+| `surfaceMuted` | `#F2F2F3` | `#1E1E20` | hover, call controls, segmented controls |
 | `border` | `#E4E4E7` | `#2A2A2E` | hairlines |
 | `text` | `#0A0A0A` | `#FAFAFA` | primary text |
 | `textMuted` | `#62626A` | `#A1A1AA` | secondary text |

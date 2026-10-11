@@ -7,25 +7,6 @@ export function formatDuration(totalSeconds: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
 
-/** Keeps digits, a leading "+", and the keypad's * and #. */
-export function normalizeNumber(input: string): string {
-  const trimmed = input.trim();
-  const body = trimmed.replace(/[^\d*#]/g, '');
-  return trimmed.startsWith('+') ? `+${body}` : body;
-}
-
-/** A number is worth dialling once it has at least three digits. */
-export const isDialable = (input: string) => normalizeNumber(input).replace(/\D/g, '').length >= 3;
-
-/** Readable grouping for display: "+91 98765 43210", "+1 415 555 0132", "98765 43210". */
-export function formatPhone(input: string): string {
-  const n = normalizeNumber(input);
-  if (/^\+91\d{10}$/.test(n)) return `+91 ${n.slice(3, 8)} ${n.slice(8)}`;
-  if (/^\+1\d{10}$/.test(n)) return `+1 ${n.slice(2, 5)} ${n.slice(5, 8)} ${n.slice(8)}`;
-  if (/^\d{10}$/.test(n)) return `${n.slice(0, 5)} ${n.slice(5)}`;
-  return n;
-}
-
 /** "Just now", "5m ago", "3h ago", "Yesterday", "Mon", "12 Sep". */
 export function formatRelative(at: number, now: number): string {
   const diff = Math.max(0, now - at);
@@ -42,7 +23,7 @@ export function formatRelative(at: number, now: number): string {
   return then.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-/** "Priya Sharma" → "PS", "madonna" → "M", a bare number → "#". */
+/** "Priya Sharma" → "PS", "madonna" → "M", nothing usable → "#". */
 export function initials(name: string): string {
   const words = name.trim().split(/\s+/).filter((w) => /^\p{L}/u.test(w));
   if (words.length === 0) return '#';

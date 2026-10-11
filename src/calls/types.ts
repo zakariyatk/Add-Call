@@ -1,25 +1,16 @@
-export interface Contact {
-  id: string;
-  name: string;
-  number: string;
-  favorite?: boolean;
-}
+import type { UserInfo } from './protocol';
+
+/** Who a call is with: another Add Call user, addressed by email. */
+export type Peer = UserInfo;
 
 export type CallDirection = 'outgoing' | 'incoming' | 'missed';
 
 export interface CallRecord {
   id: string;
-  name: string | null;
-  number: string;
+  peer: Peer;
   direction: CallDirection;
   at: number;
   /** Seconds connected; 0 for missed or unanswered calls. */
   duration: number;
   video: boolean;
-}
-
-/** Who a call is with. */
-export interface Peer {
-  name: string | null;
-  number: string;
 }

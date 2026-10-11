@@ -1,4 +1,5 @@
 import type { Session } from '../auth/session';
+import type { ConnectionStatus } from '../calls/signalingClient';
 import { brand, type ThemeMode } from '../branding/brand.config';
 import { Lockup } from '../components/Logo';
 import { Avatar, PageHeader, Switch } from '../components/ui';
@@ -15,7 +16,9 @@ export function SettingsView({
   settings,
   onChange,
   onSignOut,
+  connection,
 }: {
+  connection: ConnectionStatus;
   session: Session;
   settings: Settings;
   onChange: (s: Settings) => void;
@@ -64,7 +67,7 @@ export function SettingsView({
           onChange={(v) => set('noiseSuppression', v)}
         />
         <Switch label="Start calls with video" checked={settings.startWithVideo} onChange={(v) => set('startWithVideo', v)} />
-        <Switch label="Ring sound" hint="Play a ringtone for incoming calls." checked={settings.ringSound} onChange={(v) => set('ringSound', v)} />
+        <Switch label="Ring sound" hint="Play a ringtone in this tab for incoming calls." checked={settings.ringSound} onChange={(v) => set('ringSound', v)} />
       </div>
 
       <div className="card settings-section about">
@@ -74,8 +77,8 @@ export function SettingsView({
         <dl>
           <dt>Version</dt>
           <dd>{brand.version}</dd>
-          <dt>Build</dt>
-          <dd>Web · calling is simulated in this preview</dd>
+          <dt>Calling</dt>
+          <dd>WebRTC, peer to peer · {connection === 'online' ? 'connected' : connection === 'connecting' ? 'connecting' : 'not connected'}</dd>
         </dl>
       </div>
     </section>

@@ -2,21 +2,24 @@
   "name": "add-call",
   "private": true,
   "version": "0.1.0",
-  "description": "Add Call — a web calling app.",
+  "description": "Add Call \u2014 a web calling app with peer-to-peer WebRTC voice and video.",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && tsc -p tsconfig.server.json",
+    "start": "node build/server/index.js",
     "preview": "vite preview",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && tsc -p tsconfig.server.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "node scripts/e2e-call.mjs",
     "icons": "vite-node scripts/generate-icons.ts"
   },
   "dependencies": {
     "react": "19.1.1",
-    "react-dom": "19.1.1"
+    "react-dom": "19.1.1",
+    "ws": "8.18.3"
   },
   "devDependencies": {
     "@eslint/js": "9.35.0",
@@ -24,6 +27,7 @@
     "@types/node": "24.3.1",
     "@types/react": "19.1.12",
     "@types/react-dom": "19.1.9",
+    "@types/ws": "8.18.1",
     "@vitejs/plugin-react": "5.0.2",
     "eslint": "9.35.0",
     "eslint-plugin-react-hooks": "5.2.0",
@@ -34,5 +38,8 @@
     "vite": "7.1.5",
     "vite-node": "3.2.4",
     "vitest": "3.2.4"
+  },
+  "engines": {
+    "node": ">=20.19"
   }
 }

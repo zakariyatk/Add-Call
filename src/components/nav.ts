@@ -1,10 +1,9 @@
 import type { IconName } from './Icon';
 
-export type ViewId = 'recents' | 'contacts' | 'keypad' | 'settings';
+export type ViewId = 'recents' | 'people' | 'settings';
 
 export const NAV: { id: ViewId; label: string; icon: IconName }[] = [
   { id: 'recents', label: 'Recents', icon: 'clock' },
-  { id: 'contacts', label: 'Contacts', icon: 'users' },
-  { id: 'keypad', label: 'Keypad', icon: 'keypad' },
+  { id: 'people', label: 'People', icon: 'users' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
