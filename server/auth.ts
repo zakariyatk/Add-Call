@@ -4,6 +4,8 @@ import { brand } from '../src/branding/brand.config.ts';
 import { isEmail } from '../src/calls/protocol.ts';
 import type { Database, UserRow } from './db.ts';
 import { createGoogleSignIn, GoogleError, type GoogleConfig, type GoogleProfile } from './google.ts';
+import { passwordChangedEmail, passwordResetEmail } from './emails.ts';
+import type { Email, Mailer } from './mailer.ts';
 import { hashPassword, needsRehash, verifyPassword } from './passwords.ts';
 
 /*
@@ -14,7 +16,10 @@ import { hashPassword, needsRehash, verifyPassword } from './passwords.ts';
  *   POST /api/auth/logout                                     → 204
  *   GET  /api/auth/me                                         → 200 { user } | 401
  *   POST /api/auth/password  { currentPassword, newPassword } → 204
- *   GET  /api/auth/providers                                  → { google }
+ *   GET  /api/auth/providers                     → { google, passwordReset }
+ *   POST /api/auth/forgot       { email }            → 202 (always; emails a reset link)
+ *   POST /api/auth/reset/check  { token }            → { valid }
+ *   POST /api/auth/reset        { token, password }  → 200 { user } (signed in)
  *   GET  /api/auth/google            → redirect to Google (see google.ts)
  *   GET  /api/auth/google/callback   → session, then redirect to the app
  *
@@ -25,6 +30,8 @@ import { hashPassword, needsRehash, verifyPassword } from './passwords.ts';
 export const SESSION_COOKIE = `${brand.storageKey}_session`;
 /** Short-lived cookie tying a Google sign-in to the browser that started it. */
 export const OAUTH_STATE_COOKIE = `${brand.storageKey}_oauth`;
+/** How long a password-reset link works. */
+export const RESET_MINUTES = 60;
 export const MIN_PASSWORD = 8;
 const MAX_PASSWORD = 200;
 const SESSION_DAYS = 30;
@@ -53,6 +60,14 @@ export interface AuthOptions {
   google?: GoogleConfig | null;
   /** The app's public origin, e.g. https://call.example.com (for the Google callback URL). */
   publicUrl?: string;
+  /** Sends password-reset and security emails; without it, reset is unavailable. */
+  mailer?: Mailer | null;
+  /**
+   * Development only: build email links from the request's Host when
+   * publicUrl is unset. Never in production — a forged Host header would put
+   * an attacker's domain in the reset link.
+   */
+  devLinks?: boolean;
 }
 
 export const toPublic = (u: UserRow): PublicUser => ({ email: u.email, name: u.name, hasPassword: u.password_hash !== '', google: !!u.google_sub });
@@ -112,6 +127,17 @@ export function createAuth(opts: AuthOptions) {
   // same, so sign-in timing doesn't reveal which emails have accounts.
   const dummyHash = hashPassword(randomBytes(16).toString('hex'));
   const google = opts.google ? createGoogleSignIn(opts.google, now) : null;
+  const resetLimiter = createRateLimiter(3, 60 * 60_000, now);
+
+  /** Where links in emails point. Null means email links can't be built safely. */
+  const appOrigin = (req: IncomingMessage): string | null =>
+    opts.publicUrl?.replace(/\/$/, '') ?? (opts.devLinks ? `${isHttps(req) ? 'https' : 'http'}://${req.headers.host}` : null);
+  const resetAvailable = !!opts.mailer && (!!opts.publicUrl || !!opts.devLinks);
+
+  /** Sends in the background: response time must not depend on whether an account exists. */
+  function sendLater(email: Email) {
+    opts.mailer?.send(email).catch((err) => console.error('[mail] could not send', JSON.stringify(email.subject), '-', err instanceof Error ? err.message : err));
+  }
 
   const clientIp = (req: IncomingMessage) => {
     const fwd = opts.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : '';
@@ -264,7 +290,7 @@ export function createAuth(opts: AuthOptions) {
       const auth = authenticate(req);
       return auth ? json(200, { user: auth.user }) : json(401, { error: 'Not signed in.' });
     }
-    if (path === '/api/auth/providers' && req.method === 'GET') return json(200, { google: !!google });
+    if (path === '/api/auth/providers' && req.method === 'GET') return json(200, { google: !!google, passwordReset: resetAvailable });
     if ((path === '/api/auth/google' || path === '/api/auth/google/callback') && req.method === 'GET') return googleRoute(req, res, path);
 
     if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
@@ -331,11 +357,61 @@ export function createAuth(opts: AuthOptions) {
           throw new HttpError(400, 'Your current password is incorrect.');
         validPassword(next);
         db.updatePassword(user.id, await hashPassword(next));
+        const origin = appOrigin(req);
+        if (origin) sendLater(passwordChangedEmail(brand, user, origin));
         // Sign out everywhere else; keep this browser signed in.
         db.deleteUserSessions(user.id);
         db.insertSession(auth.sessionId, user.id, now(), now() + SESSION_DAYS * DAY);
         opts.onSessionsRevoked?.({ userEmail: user.email, except: auth.sessionId });
         return json(204);
+      }
+
+      case '/api/auth/forgot': {
+        if (!resetAvailable) throw new HttpError(404, 'Password reset is not available.');
+        throttle(ipLimiter, clientIp(req));
+        const body = await readJson(req);
+        const email = str(body.email).trim().toLowerCase();
+        if (!isEmail(email)) throw new HttpError(400, 'Enter a valid email address.');
+        throttle(resetLimiter, email);
+        const user = db.userByEmail(email);
+        const origin = appOrigin(req);
+        if (user && origin) {
+          const token = randomBytes(32).toString('base64url');
+          db.insertReset(sha256(token), user.id, now(), now() + RESET_MINUTES * 60_000);
+          // The token goes in the URL fragment, which browsers never send to servers or in Referer.
+          sendLater(passwordResetEmail(brand, user, `${origin}/#/reset/${token}`, RESET_MINUTES));
+        }
+        // Same answer whether or not the account exists.
+        return json(202, { ok: true });
+      }
+
+      case '/api/auth/reset/check': {
+        throttle(ipLimiter, clientIp(req));
+        const body = await readJson(req);
+        const reset = db.reset(sha256(str(body.token)));
+        return json(200, { valid: !!reset && reset.expires_at > now() });
+      }
+
+      case '/api/auth/reset': {
+        throttle(ipLimiter, clientIp(req));
+        const body = await readJson(req);
+        const id = sha256(str(body.token));
+        const reset = db.reset(id);
+        if (!reset || reset.expires_at <= now()) throw new HttpError(400, 'This reset link is invalid or has expired. Request a new one.');
+        const password = str(body.password);
+        validPassword(password);
+        const user = db.userById(reset.user_id);
+        if (!user) throw new HttpError(400, 'This reset link is invalid or has expired. Request a new one.');
+        db.updatePassword(user.id, await hashPassword(password));
+        db.deleteUserResets(user.id);
+        // Whoever had access before the reset is signed out everywhere.
+        db.deleteUserSessions(user.id);
+        opts.onSessionsRevoked?.({ userEmail: user.email });
+        emailLimiter.clear(user.email);
+        startSession(req, res, user);
+        const origin = appOrigin(req);
+        if (origin) sendLater(passwordChangedEmail(brand, user, origin));
+        return json(200, { user: toPublic(db.userById(user.id)!) });
       }
 
       default:

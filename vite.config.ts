@@ -11,7 +11,7 @@ import { createBackend } from './server/app.ts';
  */
 function backendPlugin(): Plugin {
   const mount = (middlewares: Connect.Server, httpServer: Server | null) => {
-    const backend = createBackend({ databasePath: process.env.DATABASE_PATH ?? 'data/dev.db' });
+    const backend = createBackend({ databasePath: process.env.DATABASE_PATH ?? 'data/dev.db', dev: true });
     middlewares.use((req, res, next) => {
       backend.handleApi(req, res).then((handled) => handled || next(), next);
     });

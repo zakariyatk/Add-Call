@@ -125,7 +125,7 @@ const me = async (session?: string) => {
 
 describe('Sign in with Google', () => {
   it('advertises the provider', async () => {
-    expect(await (await fetch(`${appUrl}/api/auth/providers`)).json()).toEqual({ google: true });
+    expect(await (await fetch(`${appUrl}/api/auth/providers`)).json()).toMatchObject({ google: true });
   });
 
   it('sends the user to Google with state, nonce and a PKCE challenge', async () => {
@@ -245,7 +245,7 @@ describe('without Google configured', () => {
     const auth = createAuth({ db: db2 });
     const s = createServer(async (req, res) => void (await auth.handle(req, res)));
     const url = await listen(s);
-    expect(await (await fetch(`${url}/api/auth/providers`)).json()).toEqual({ google: false });
+    expect(await (await fetch(`${url}/api/auth/providers`)).json()).toMatchObject({ google: false });
     expect((await fetch(`${url}/api/auth/google`, { redirect: 'manual' })).status).toBe(404);
     await new Promise((r) => s.close(r));
     db2.close();

@@ -10,6 +10,9 @@ over WebRTC.
   with Google**. Sessions last 30 days and renew while you use the app. You can
   sign out, and changing your password signs out your other devices. Google
   users can add a password later.
+- **Forgot password**: get an emailed link to choose a new password (works
+  once, expires after an hour). Resetting signs you in and signs out every
+  other device, and a "password changed" notice is emailed to you.
 
 - **Real calls (WebRTC)**: audio and video go directly between the two browsers.
   A small signaling server introduces them and relays the WebRTC handshake. It
@@ -40,7 +43,9 @@ npm run dev        # app + accounts API + signaling on http://localhost:5174
 ```
 
 Development accounts are stored in `data/dev.db` (git-ignored; delete it to
-start fresh).
+start fresh). In development, emails such as password-reset links are
+**printed in the terminal** running `npm run dev` instead of being sent, unless
+you configure SMTP.
 
 To try a call on one machine, open the app in **two different browsers** (or a
 normal and a private window), **create two accounts**, and call one from the
@@ -52,8 +57,9 @@ microphone without HTTPS.
 ```bash
 npm run typecheck  # app, tooling and server (strict)
 npm run lint
-npm test           # Vitest: accounts API, Google sign-in (against a stand-in
-                   # Google), password hashing, signaling server,
+npm test           # Vitest: accounts API, password reset, SMTP delivery,
+                   # Google sign-in (against a stand-in Google), password
+                   # hashing, signaling server,
                    # call state machine, protocol, history, branding, formatting
 npm run build      # dist/ (app) + build/ (server)
 npm run test:e2e   # two real browsers call each other (needs `npm start` running
@@ -87,9 +93,27 @@ PORT=8080 npm start            # app, accounts API (/api/auth/*) and signaling (
 | `TURN_URL` | none | Comma-separated TURN URLs, e.g. `turn:turn.example.com:3478,turns:turn.example.com:5349` |
 | `TURN_USERNAME`, `TURN_CREDENTIAL` | none | TURN credentials |
 | `PUBLIC_URL` | from the request | The app's public origin, e.g. `https://call.example.com`; used to build the Google callback URL |
+| `SMTP_URL` | none | SMTP connection, e.g. `smtps://user:pass@smtp.example.com:465`; turns on "Forgot password?" |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | port `587` | The same, as separate settings (`SMTP_SECURE=true` for port 465) |
+| `MAIL_FROM` | none (required with SMTP) | Sender, e.g. `Add Call <no-reply@call.example.com>` |
+| `MAIL_TRANSPORT` | SMTP | `console` prints emails to the server log instead of sending (testing only: the log will contain reset links) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | none | Turn on "Continue with Google" (see below) |
 | `GOOGLE_REDIRECT_URI` | `PUBLIC_URL` + `/api/auth/google/callback` | Override the exact callback URL sent to Google |
 | `ALLOWED_ORIGINS` | same host only | Extra origins allowed to call the API and open the WebSocket |
+
+### Email (forgot password)
+
+"Forgot password?" appears once email is set up. Any SMTP provider works:
+Postmark, Amazon SES, SendGrid, Mailgun, Brevo, or Google Workspace.
+
+1. Create SMTP credentials with your provider and **verify your sending domain**
+   (add the SPF and DKIM DNS records it gives you). Without that, reset
+   emails tend to land in spam.
+2. Set `SMTP_URL` (or the `SMTP_HOST`… settings), `MAIL_FROM`, and
+   **`PUBLIC_URL`**. Reset stays off without `PUBLIC_URL`, on purpose: the
+   link must never be built from a request's `Host` header, or an attacker
+   could get a real reset link sent to a victim pointing at the attacker's site.
+3. Restart the server. The log warns if something is missing.
 
 ### Sign in with Google
 
@@ -146,6 +170,14 @@ Requirements for real-world use:
   Google's published keys, along with issuer, audience, expiry and nonce. Only
   Google accounts with a **verified email** are accepted. The client secret
   never reaches the browser.
+- **Password reset**: links carry a random 256-bit token; only its SHA-256 is
+  stored. A link works once, expires after an hour, and requesting a new one
+  cancels the old. The token sits in the URL fragment (`/#/reset/…`), which
+  browsers never send to servers or in `Referer`, and the app removes it from
+  the address bar on arrival. "Forgot password?" answers the same whether or
+  not the email has an account, and sends the email in the background so
+  timing doesn't reveal it either. Reset emails are limited to 3 per address
+  per hour. A successful reset signs out all sessions and emails a notice.
 - **Account linking**: a Google account is matched by its permanent Google ID.
   The first Google sign-in with an email that already has a password account
   links the two, because Google has verified that the person owns that email.
@@ -165,9 +197,8 @@ Requirements for real-world use:
   checked, and dead connections are dropped.
 
 **Not included yet**
-- Password reset and email verification. Both need an email-sending service
-  (e.g. SMTP, Postmark, SES). Until then, a forgotten password must be reset
-  by an operator in the database.
+- Email verification at sign-up (email sending is now in place, so this is a
+  small addition).
 - Sign in with Apple, and two-factor authentication.
 - Calls are one-to-one. Calling phone numbers would need a telephony provider
   (SIP / PSTN gateway).
@@ -197,6 +228,7 @@ src/
 server/
   auth.ts              accounts API, sessions, rate limiting (tested)
   google.ts            Sign in with Google: OIDC + PKCE, ID-token verification (tested)
+  mailer.ts, emails.ts SMTP sending and branded email templates (tested)
   passwords.ts         scrypt hashing (tested)
   db.ts                SQLite schema and queries
   signaling.ts         authenticated presence, invitations, SDP/ICE relay (tested)
@@ -208,7 +240,7 @@ scripts/               generate-icons.ts, e2e-call.mjs
 
 ## Roadmap
 
-- Password reset and email verification (needs an email provider).
+- Email verification at sign-up.
 - Sign in with Apple; two-factor authentication.
 - Saved contacts and server-side call history.
 - Push notifications for incoming calls when the tab is closed.

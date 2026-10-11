@@ -1049,3 +1049,18 @@ button {
   height: 1px;
   background: var(--border);
 }
+
+/* ---------- password reset ---------- */
+
+.forgot-link {
+  justify-self: end;
+  font-size: 13px;
+  text-decoration: none;
+  margin-top: 2px;
+}
+.reset-screen {
+  min-height: 100%;
+}
+.login-brand.is-visible {
+  display: block;
+}

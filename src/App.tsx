@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { authApi, takeAuthError, type Session } from './auth/api';
+import { authApi, takeAuthError, takeResetToken, type Session } from './auth/api';
 import { brand } from './branding/brand.config';
 import { isActive } from './calls/callMachine';
 import { addToHistory, loadHistory } from './calls/history';
@@ -14,6 +14,7 @@ import { CallScreen } from './views/CallScreen';
 import { LoginScreen } from './views/LoginScreen';
 import { PeopleView } from './views/PeopleView';
 import { RecentsView } from './views/RecentsView';
+import { ResetPasswordScreen } from './views/ResetPasswordScreen';
 import { SettingsView } from './views/SettingsView';
 
 const store = browserStore();
@@ -29,6 +30,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [signedOutNotice, setSignedOutNotice] = useState<string | null>(null);
   const [authError] = useState(takeAuthError);
+  const [resetToken, setResetToken] = useState(takeResetToken);
   const [settings, setSettings] = useState<Settings>(() => loadSettings(store));
   const [view, setView] = useState<ViewId>(viewFromHash);
   const [history, setHistory] = useState<CallRecord[]>([]);
@@ -126,6 +128,21 @@ export default function App() {
     window.addEventListener('beforeunload', onUnload);
     return () => window.removeEventListener('beforeunload', onUnload);
   }, [call.status]);
+
+  // A reset link wins over everything else, signed in or not.
+  if (resetToken)
+    return (
+      <ResetPasswordScreen
+        token={resetToken}
+        onDone={(s) => {
+          setResetToken(null);
+          setSignedOutNotice(null);
+          navigate('recents');
+          enter(s);
+        }}
+        onCancel={() => setResetToken(null)}
+      />
+    );
 
   if (session === undefined)
     return (

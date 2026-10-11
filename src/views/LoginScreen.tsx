@@ -3,7 +3,7 @@ import { AuthError, GOOGLE_SIGN_IN_URL, MIN_PASSWORD, authApi, type Session } fr
 import { brand } from '../branding/brand.config';
 import { Lockup, LogoMark } from '../components/Logo';
 
-type Mode = 'signin' | 'signup';
+type Mode = 'signin' | 'signup' | 'forgot' | 'sent';
 
 /** Google's "G" mark, as required by its sign-in branding guidelines. */
 function GoogleMark() {
@@ -35,11 +35,30 @@ export function LoginScreen({
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [busy, setBusy] = useState(false);
   const [google, setGoogle] = useState(false);
+  const [canReset, setCanReset] = useState(false);
   const signup = mode === 'signup';
 
   useEffect(() => {
-    void authApi.providers().then((p) => setGoogle(p.google));
+    void authApi.providers().then((p) => {
+      setGoogle(p.google);
+      setCanReset(p.passwordReset);
+    });
   }, []);
+
+  const requestReset = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await authApi.forgotPassword(email.trim());
+      setMode('sent');
+    } catch (err) {
+      setError(err instanceof AuthError ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -74,97 +93,152 @@ export function LoginScreen({
       </aside>
 
       <main className="login-main">
-        <form className="login-card" onSubmit={submit} noValidate aria-busy={busy}>
-          <div className="login-brand">
-            <Lockup size={36} />
-          </div>
-          <h1>{signup ? `Create your ${brand.name} account` : `Sign in to ${brand.name}`}</h1>
-          <p className="muted">{signup ? 'Free, and takes a few seconds.' : 'Welcome back. Enter your details to continue.'}</p>
-
-          {notice && !error && (
-            <p className="form-notice" role="status">
-              {notice}
-            </p>
-          )}
-
-          {google && (
-            <>
-              <a className="btn btn-secondary btn-block btn-google" href={GOOGLE_SIGN_IN_URL}>
-                <GoogleMark />
-                Continue with Google
-              </a>
-              <p className="divider" role="separator">
-                <span>or {signup ? 'sign up' : 'sign in'} with email</span>
-              </p>
-            </>
-          )}
-
-          {signup && (
-            <label className="field">
-              <span>Name</span>
-              <input type="text" autoComplete="name" required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
-            </label>
-          )}
-          <label className="field">
-            <span>Email</span>
-            <input
-              type="email"
-              autoComplete={signup ? 'email' : 'username'}
-              autoFocus
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-            />
-          </label>
-          <div className="field">
-            <span className="field-row">
-              <label htmlFor="password">Password</label>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-pressed={showPassword}
-                aria-controls="password"
-              >
-                {showPassword ? 'Hide password' : 'Show password'}
-              </button>
-            </span>
-            <input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              autoComplete={signup ? 'new-password' : 'current-password'}
-              required
-              minLength={signup ? MIN_PASSWORD : undefined}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              aria-invalid={error ? true : undefined}
-              aria-describedby={error ? 'login-error' : signup ? 'password-hint' : undefined}
-            />
-            {signup && (
-              <span id="password-hint" className="field-hint">
-                At least {MIN_PASSWORD} characters.
-              </span>
+        {mode === 'forgot' || mode === 'sent' ? (
+          <form className="login-card" onSubmit={requestReset} noValidate aria-busy={busy}>
+            <div className="login-brand">
+              <Lockup size={36} />
+            </div>
+            {mode === 'forgot' ? (
+              <>
+                <h1>Reset your password</h1>
+                <p className="muted">Enter your account's email and we'll send you a link to choose a new password.</p>
+                <label className="field">
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    autoComplete="username"
+                    autoFocus
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </label>
+                {error && (
+                  <p role="alert" className="form-error">
+                    {error}
+                  </p>
+                )}
+                <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email.trim()}>
+                  {busy ? 'Sending…' : 'Send reset link'}
+                </button>
+              </>
+            ) : (
+              <>
+                <h1>Check your email</h1>
+                <p className="muted" role="status">
+                  If an account exists for <strong>{email.trim()}</strong>, a link to reset your password is on its way. It
+                  works once and expires in 1 hour. Check your spam folder if you don't see it.
+                </p>
+                <button type="button" className="btn btn-secondary btn-block" onClick={() => setMode('forgot')}>
+                  Use a different email
+                </button>
+              </>
             )}
-          </div>
-
-          {error && (
-            <p id="login-error" role="alert" className="form-error">
-              {error}
+            <p className="login-switch">
+              <button type="button" className="link-btn" onClick={() => switchMode('signin')}>
+                Back to sign in
+              </button>
             </p>
-          )}
+          </form>
+        ) : (
+          <form className="login-card" onSubmit={submit} noValidate aria-busy={busy}>
+            <div className="login-brand">
+              <Lockup size={36} />
+            </div>
+            <h1>{signup ? `Create your ${brand.name} account` : `Sign in to ${brand.name}`}</h1>
+            <p className="muted">{signup ? 'Free, and takes a few seconds.' : 'Welcome back. Enter your details to continue.'}</p>
 
-          <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
-            {busy ? (signup ? 'Creating account…' : 'Signing in…') : signup ? 'Create account' : 'Sign in'}
-          </button>
+            {notice && !error && (
+              <p className="form-notice" role="status">
+                {notice}
+              </p>
+            )}
 
-          <p className="login-switch">
-            {signup ? 'Already have an account?' : `New to ${brand.name}?`}{' '}
-            <button type="button" className="link-btn" onClick={() => switchMode(signup ? 'signin' : 'signup')}>
-              {signup ? 'Sign in' : 'Create an account'}
+            {google && (
+              <>
+                <a className="btn btn-secondary btn-block btn-google" href={GOOGLE_SIGN_IN_URL}>
+                  <GoogleMark />
+                  Continue with Google
+                </a>
+                <p className="divider" role="separator">
+                  <span>or {signup ? 'sign up' : 'sign in'} with email</span>
+                </p>
+              </>
+            )}
+
+            {signup && (
+              <label className="field">
+                <span>Name</span>
+                <input type="text" autoComplete="name" required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
+              </label>
+            )}
+            <label className="field">
+              <span>Email</span>
+              <input
+                type="email"
+                autoComplete={signup ? 'email' : 'username'}
+                autoFocus
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </label>
+            <div className="field">
+              <span className="field-row">
+                <label htmlFor="password">Password</label>
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-pressed={showPassword}
+                  aria-controls="password"
+                >
+                  {showPassword ? 'Hide password' : 'Show password'}
+                </button>
+              </span>
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete={signup ? 'new-password' : 'current-password'}
+                required
+                minLength={signup ? MIN_PASSWORD : undefined}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? 'login-error' : signup ? 'password-hint' : undefined}
+              />
+              {signup && (
+                <span id="password-hint" className="field-hint">
+                  At least {MIN_PASSWORD} characters.
+                </span>
+              )}
+              {!signup && canReset && (
+                <button type="button" className="link-btn forgot-link" onClick={() => switchMode('forgot')}>
+                  Forgot password?
+                </button>
+              )}
+            </div>
+
+            {error && (
+              <p id="login-error" role="alert" className="form-error">
+                {error}
+              </p>
+            )}
+
+            <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
+              {busy ? (signup ? 'Creating account…' : 'Signing in…') : signup ? 'Create account' : 'Sign in'}
             </button>
-          </p>
-        </form>
+
+            <p className="login-switch">
+              {signup ? 'Already have an account?' : `New to ${brand.name}?`}{' '}
+              <button type="button" className="link-btn" onClick={() => switchMode(signup ? 'signin' : 'signup')}>
+                {signup ? 'Sign in' : 'Create an account'}
+              </button>
+            </p>
+          </form>
+        )}
       </main>
     </div>
   );

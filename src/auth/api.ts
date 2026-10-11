@@ -25,6 +25,17 @@ const GOOGLE_ERRORS: Record<string, string> = {
   google_failed: 'Google sign-in failed. Please try again.',
 };
 
+/**
+ * Reads (and removes) a password-reset token from a link like /#/reset/<token>.
+ * Removing it keeps the token out of browser history and later screenshots.
+ */
+export function takeResetToken(): string | null {
+  const m = /^#\/reset\/([\w-]{20,100})$/.exec(window.location.hash);
+  if (!m) return null;
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  return m[1];
+}
+
 /** Reads (and removes) an ?auth_error=… left by a failed Google sign-in. */
 export function takeAuthError(): string | null {
   const url = new URL(window.location.href);
@@ -78,13 +89,18 @@ export const authApi = {
     }
   },
   /** Which sign-in methods the server offers. */
-  async providers(): Promise<{ google: boolean }> {
+  async providers(): Promise<{ google: boolean; passwordReset: boolean }> {
     try {
-      return (await request('/api/auth/providers')) as { google: boolean };
+      return (await request('/api/auth/providers')) as { google: boolean; passwordReset: boolean };
     } catch {
-      return { google: false };
+      return { google: false, passwordReset: false };
     }
   },
+  /** Emails a reset link if the account exists. Succeeds either way, by design. */
+  forgotPassword: async (email: string) => void (await request('/api/auth/forgot', { method: 'POST', body: { email } })),
+  checkResetToken: async (token: string) => ((await request('/api/auth/reset/check', { method: 'POST', body: { token } })) as { valid: boolean }).valid,
+  /** Sets a new password from an emailed link, and signs in. */
+  resetPassword: async (token: string, password: string) => user(await request('/api/auth/reset', { method: 'POST', body: { token, password } })),
   signIn: async (email: string, password: string) => user(await request('/api/auth/login', { method: 'POST', body: { email, password } })),
   signUp: async (name: string, email: string, password: string) =>
     user(await request('/api/auth/signup', { method: 'POST', body: { name, email, password } })),

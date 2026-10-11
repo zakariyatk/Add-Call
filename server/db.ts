@@ -18,6 +18,13 @@ export interface UserRow {
   created_at: number;
 }
 
+export interface ResetRow {
+  token_hash: string;
+  user_id: number;
+  created_at: number;
+  expires_at: number;
+}
+
 export interface SessionRow {
   token_hash: string;
   user_id: number;
@@ -42,6 +49,13 @@ const SCHEMA = `
     expires_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
+  CREATE TABLE IF NOT EXISTS password_resets (
+    token_hash TEXT    PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets(user_id);
 `;
 
 /** Additive schema changes for databases created by older versions. */
@@ -70,6 +84,10 @@ export function openDatabase(path: string) {
     deleteSession: db.prepare('DELETE FROM sessions WHERE token_hash = ?'),
     deleteUserSessions: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
     deleteExpired: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
+    insertReset: db.prepare('INSERT INTO password_resets (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'),
+    reset: db.prepare('SELECT * FROM password_resets WHERE token_hash = ?'),
+    deleteUserResets: db.prepare('DELETE FROM password_resets WHERE user_id = ?'),
+    deleteExpiredResets: db.prepare('DELETE FROM password_resets WHERE expires_at <= ?'),
   };
 
   return {
@@ -88,7 +106,15 @@ export function openDatabase(path: string) {
     extendSession: (tokenHash: string, expiresAt: number) => void q.extendSession.run(expiresAt, tokenHash),
     deleteSession: (tokenHash: string) => void q.deleteSession.run(tokenHash),
     deleteUserSessions: (userId: number) => void q.deleteUserSessions.run(userId),
-    deleteExpired: (now: number) => Number(q.deleteExpired.run(now).changes),
+    deleteExpired: (now: number) => Number(q.deleteExpired.run(now).changes) + Number(q.deleteExpiredResets.run(now).changes),
+    /** Stores a reset token (hashed). Older tokens for the user stop working. */
+    insertReset(tokenHash: string, userId: number, now: number, expiresAt: number) {
+      q.deleteUserResets.run(userId);
+      q.insertReset.run(tokenHash, userId, now, expiresAt);
+    },
+    reset: (tokenHash: string) => q.reset.get(tokenHash) as ResetRow | undefined,
+    /** Tokens are single-use: consuming one removes every token for that user. */
+    deleteUserResets: (userId: number) => void q.deleteUserResets.run(userId),
     close: () => db.close(),
   };
 }
