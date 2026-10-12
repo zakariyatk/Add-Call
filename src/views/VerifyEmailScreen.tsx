@@ -103,9 +103,12 @@ export function VerifyEmailLink({
   session: Session | null | undefined;
   onContinue: (refreshed: Session | null) => void;
 }) {
-  const [state, setState] = useState<{ status: 'working' } | { status: 'done'; email: string | null } | { status: 'failed'; message: string }>({
-    status: 'working',
-  });
+  const [state, setState] = useState<
+    | { status: 'working' }
+    | { status: 'done'; email: string | null }
+    | { status: 'already'; email: string }
+    | { status: 'failed'; message: string }
+  >({ status: 'working' });
   const started = useRef(false);
 
   useEffect(() => {
@@ -113,7 +116,12 @@ export function VerifyEmailLink({
     started.current = true;
     authApi.verifyEmail(token).then(
       (email) => setState({ status: 'done', email }),
-      (err) => setState({ status: 'failed', message: err instanceof AuthError ? err.message : 'Something went wrong. Please try again.' }),
+      async (err) => {
+        // A used link opened again by someone already confirmed isn't a problem worth an error.
+        const current = await authApi.me().catch(() => null);
+        if (current?.emailVerified) return setState({ status: 'already', email: current.email });
+        setState({ status: 'failed', message: err instanceof AuthError ? err.message : 'Something went wrong. Please try again.' });
+      },
     );
   }, [token]);
 
@@ -136,6 +144,19 @@ export function VerifyEmailLink({
         </p>
         <button type="button" className="btn btn-primary btn-block" onClick={continueOn}>
           {session ? 'Continue' : 'Sign in'}
+        </button>
+      </Card>
+    );
+
+  if (state.status === 'already')
+    return (
+      <Card>
+        <h1>Already confirmed</h1>
+        <p className="muted" role="status">
+          <strong>{state.email}</strong> is already confirmed, so this link isn't needed any more.
+        </p>
+        <button type="button" className="btn btn-primary btn-block" onClick={continueOn}>
+          Continue to {brand.name}
         </button>
       </Card>
     );

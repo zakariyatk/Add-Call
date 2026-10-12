@@ -8,6 +8,12 @@
  * ("Ann" and "Bob"), and asserts that media actually flows both ways.
  * Requires Playwright (`npm i -D playwright`); set PLAYWRIGHT_MODULE to use
  * a copy installed elsewhere.
+ *
+ * When the server asks new accounts to confirm their email, start it with
+ * MAIL_TRANSPORT=console and pass its log as E2E_MAIL_LOG:
+ *
+ *   MAIL_TRANSPORT=console npm start > server.log
+ *   E2E_MAIL_LOG=server.log npm run test:e2e
  */
 const pw = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const { chromium } = pw.chromium ? pw : pw.default; // ESM or CommonJS build
@@ -25,6 +31,26 @@ const browser = await chromium.launch({
 const errors = [];
 
 const run = Date.now().toString(36); // fresh accounts every run
+let verifiedInPlace = 0;
+
+/**
+ * The confirmation link for a new account. When the server verifies email
+ * addresses, run it with MAIL_TRANSPORT=console and point E2E_MAIL_LOG at its
+ * log so the test can read the link it "sent".
+ */
+async function verifyLink(email) {
+  const log = process.env.E2E_MAIL_LOG;
+  if (!log) throw new Error('The server asks new accounts to confirm their email: set E2E_MAIL_LOG to its log (MAIL_TRANSPORT=console).');
+  const { readFile } = await import('node:fs/promises');
+  for (let i = 0; i < 50; i++) {
+    const text = await readFile(log, 'utf8');
+    const at = text.lastIndexOf(`To: ${email}`);
+    const m = at >= 0 && /https?:\/\/\S+#\/verify\/[\w-]+/.exec(text.slice(at));
+    if (m) return m[0];
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`no confirmation email for ${email} in ${log}`);
+}
 const PASSWORD = 'e2e-password-123';
 
 /** Creates an account through the sign-up form, in its own browser context. */
@@ -39,7 +65,17 @@ async function user(name) {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: 'Create account' }).click();
-  await page.waitForSelector('.shell');
+  const confirm = page.getByRole('heading', { name: 'Confirm your email' });
+  await Promise.race([page.waitForSelector('.shell'), confirm.waitFor()]);
+  if (await confirm.isVisible()) {
+    // Email verification is on: open the emailed link in this same tab, the
+    // way someone pastes it into the tab that is waiting for it.
+    await page.goto(await verifyLink(email));
+    await page.getByRole('heading', { name: 'Email confirmed' }).waitFor();
+    await page.getByRole('button', { name: /^Continue to / }).click();
+    await page.waitForSelector('.shell');
+    verifiedInPlace += 1;
+  }
   page.email = email;
   return page;
 }
@@ -61,6 +97,7 @@ try {
   const ann = await user('Ann Lee');
   const bob = await user('Bob Stone');
   assert(true, 'two accounts created through the sign-up form');
+  if (verifiedInPlace) assert(verifiedInPlace === 2, 'both confirmed their email from a link opened in the waiting tab');
 
   await bob.reload();
   await bob.waitForSelector('.shell');
