@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
 import type { ConnectionStatus } from '../calls/CallController';
+import { notifyPermission, requestNotifyPermission } from '../calls/notify';
 import { brand, type ThemeMode } from '../branding/brand.config';
 import { Lockup } from '../components/Logo';
 import { Avatar, PageHeader, Switch } from '../components/ui';
@@ -71,6 +72,7 @@ export function SettingsView({
         />
         <Switch label="Start calls with video" checked={settings.startWithVideo} onChange={(v) => set('startWithVideo', v)} />
         <Switch label="Ring sound" hint="Play a ringtone in this tab for incoming calls." checked={settings.ringSound} onChange={(v) => set('ringSound', v)} />
+        <CallNotifications />
       </div>
 
       <div className="card settings-section about">
@@ -85,6 +87,33 @@ export function SettingsView({
         </dl>
       </div>
     </section>
+  );
+}
+
+function CallNotifications() {
+  const [permission, setPermission] = useState(notifyPermission);
+  const hint =
+    permission === 'granted'
+      ? "On — you'll get a notification when someone calls while this tab is in the background."
+      : permission === 'denied'
+        ? `Blocked. Allow notifications for this site in your browser's settings to be told about calls.`
+        : permission === 'unsupported'
+          ? "This browser can't show notifications. Keep this tab open to hear calls."
+          : 'Get a notification when someone calls while this tab is in the background.';
+  return (
+    <div className="setting-row">
+      <span>
+        <span className="setting-label">Call notifications</span>
+        <span className="setting-hint" role="status">
+          {hint}
+        </span>
+      </span>
+      {permission === 'default' && (
+        <button type="button" className="btn btn-secondary" onClick={() => void requestNotifyPermission().then(setPermission)}>
+          Turn on
+        </button>
+      )}
+    </div>
   );
 }
 
