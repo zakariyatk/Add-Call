@@ -30,7 +30,10 @@ There is no server of our own to run.
   box to call anyone on Add Call by their email address.
 - **Incoming calls**: full-screen ring with Accept, Accept with video and
   Decline, plus a ringtone (can be turned off). It rings in every tab and
-  device you're signed in on; answering on one stops the others.
+  device you're signed in on; answering on one stops the others. With
+  notifications turned on (Settings → Calling) a call also shows a system
+  notification while the tab is in the background; phones vibrate. The caller
+  hears a ringback tone while it rings.
 - **In call**: live timer, mute, camera on/off mid-call, a mirrored self-view,
   and indicators when the other person mutes or turns their camera off. If the
   camera is unavailable the call falls back to voice.

@@ -3,6 +3,7 @@ import { brand } from '../branding/brand.config';
 import { supabase } from '../lib/supabase';
 import { callReducer, IDLE, isActive, toRecord, type CallAction, type CallState } from './callMachine';
 import type { MediaSession } from './media';
+import { notifyIncomingCall } from './notify';
 import { RING_TIMEOUT_MS, type CallRow, type PresenceUser } from './protocol';
 import { Ringtone } from './ringtone';
 import type { CallRecord, Peer } from './types';
@@ -77,7 +78,11 @@ export class CallController {
   private online: RealtimeChannel | null = null;
   private inbox: RealtimeChannel | null = null;
   private media: MediaSession | null = null;
-  private ringtone = new Ringtone();
+  private ringtone = new Ringtone('ring');
+  private ringback = new Ringtone('ringback');
+  private closeNotification: () => void = () => {};
+  /** Both Realtime channels must be joined before calls can ring. */
+  private joined = { online: false, inbox: false };
   private resetTimer: number | null = null;
   private ringTimer: number | null = null;
   private prefs: CallPreferences = { noiseSuppression: true, ringSound: true };
@@ -110,18 +115,28 @@ export class CallController {
     if (this.me?.id === user.id && this.online) return;
     this.disconnect();
     this.me = user;
+    this.joined = { online: false, inbox: false };
     this.set({ connection: 'connecting' });
 
-    // Calls to and from me. Row-level security only delivers rows I'm part of.
+    // Calls to and from me, on my own private channel (the project allows only
+    // private channels). Row-level security only delivers rows I'm part of.
     this.inbox = supabase
-      .channel(`calls:${user.id}`)
+      .channel(`calls:${user.id}`, { config: { private: true } })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calls', filter: `callee_id=eq.${user.id}` }, (p) =>
         this.onRow(p.new as CallRow),
       )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calls', filter: `caller_id=eq.${user.id}` }, (p) =>
         this.onRow(p.new as CallRow),
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          this.setJoined('inbox', true);
+          void this.checkRinging();
+        } else {
+          if (status !== 'CLOSED') console.warn('[calls] incoming-call channel', status, err?.message ?? '');
+          this.setJoined('inbox', false);
+        }
+      });
 
     // Who's online: a private channel only signed-in users can join.
     this.online = supabase
@@ -129,14 +144,37 @@ export class CallController {
       .on('presence', { event: 'sync' }, () => this.syncPresence())
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          this.set({ connection: 'online' });
-          void this.trackPresence();
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          this.set({ connection: 'connecting' }); // supabase-js retries on its own
-        } else if (status === 'CLOSED') {
-          this.set({ connection: 'offline', presence: [] });
+          this.setJoined('online', true);
+        } else {
+          this.setJoined('online', false); // supabase-js retries on its own
+          if (status === 'CLOSED') this.set({ presence: [] });
         }
       });
+  }
+
+  private setJoined(channel: 'online' | 'inbox', joined: boolean) {
+    this.joined = { ...this.joined, [channel]: joined };
+    if (!this.me) return;
+    const connection: ConnectionStatus = this.joined.online && this.joined.inbox ? 'online' : 'connecting';
+    if (connection === this.snapshot.connection) return;
+    this.set({ connection });
+    if (connection === 'online') void this.trackPresence();
+  }
+
+  /** Picks up a call that started ringing before (or while) the inbox was joining. */
+  private async checkRinging() {
+    const me = this.me;
+    if (!me) return;
+    const { data, error } = await supabase
+      .from('calls')
+      .select('*')
+      .eq('callee_id', me.id)
+      .eq('status', 'ringing')
+      .gt('created_at', new Date(Date.now() - RING_TIMEOUT_MS).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (error) return console.warn('[calls] could not check for ringing calls', error.message);
+    if (this.me === me && data?.[0]) this.onRow(data[0] as CallRow);
   }
 
   disconnect() {
@@ -144,6 +182,7 @@ export class CallController {
     for (const ch of [this.online, this.inbox]) if (ch) void supabase.removeChannel(ch);
     this.online = this.inbox = null;
     this.me = null;
+    this.joined = { online: false, inbox: false };
     this.set({ connection: 'offline', presence: [] });
   }
 
@@ -187,6 +226,7 @@ export class CallController {
     }
     const row = data as CallRow;
     this.dispatch({ type: 'ringing', callId, peer: peerOf(row, me.id) });
+    this.ringback.start();
     this.ringTimer = window.setTimeout(() => {
       if (!this.isCurrent(callId, 'ringing')) return;
       void this.endRow(callId, 'timeout');
@@ -198,7 +238,7 @@ export class CallController {
     const { call } = this.snapshot;
     if (call.status !== 'incoming' || !call.callId) return;
     const callId = call.callId;
-    this.ringtone.stop();
+    this.stopRinging();
     this.clearRingTimer();
     this.dispatch({ type: 'accept', video });
     const stream = await this.acquireMedia(video);
@@ -377,8 +417,10 @@ export class CallController {
         if (Date.now() - Date.parse(row.created_at) > RING_TIMEOUT_MS) return; // stale
         if (isActive(call.status)) return void this.endRow(row.id, 'busy');
         this.clearReset();
-        this.dispatch({ type: 'incoming', callId: row.id, peer: peerOf(row, me.id), video: row.video, at: Date.now() });
+        const peer = peerOf(row, me.id);
+        this.dispatch({ type: 'incoming', callId: row.id, peer, video: row.video, at: Date.now() });
         if (this.prefs.ringSound) this.ringtone.start();
+        this.closeNotification = notifyIncomingCall(row.id, peer, row.video);
         this.ringTimer = window.setTimeout(() => {
           if (this.isCurrent(row.id, 'incoming')) this.dispatch({ type: 'end', reason: 'timeout', at: Date.now(), callId: row.id });
         }, RING_TIMEOUT_MS);
@@ -391,6 +433,7 @@ export class CallController {
 
     if (row.caller_id === me.id && row.status === 'accepted' && mine && (call.status === 'calling' || call.status === 'ringing')) {
       this.clearRingTimer();
+      this.stopRinging();
       this.dispatch({ type: 'accepted', callId: row.id });
       const stream = this.snapshot.localStream;
       if (stream) void this.joinMedia(row.id, stream);
@@ -412,8 +455,15 @@ export class CallController {
     await this.online.track({ email: this.me.email, name: this.me.name, busy: isActive(this.snapshot.call.status) } satisfies PresenceMeta);
   }
 
-  private onEnded(call: CallState) {
+  private stopRinging() {
     this.ringtone.stop();
+    this.ringback.stop();
+    this.closeNotification();
+    this.closeNotification = () => {};
+  }
+
+  private onEnded(call: CallState) {
+    this.stopRinging();
     this.clearRingTimer();
     this.media?.leave();
     this.media = null;
