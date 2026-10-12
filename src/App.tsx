@@ -9,6 +9,7 @@ import { AppShell } from './components/AppShell';
 import { LogoMark } from './components/Logo';
 import { NAV, type ViewId } from './components/nav';
 import { browserStore, storageKey } from './lib/storage';
+import { watchForUpdates } from './lib/updates';
 import { applyTheme, loadSettings, saveSettings, type Settings } from './settings';
 import { CallScreen } from './views/CallScreen';
 import { LoginScreen } from './views/LoginScreen';
@@ -134,6 +135,13 @@ export default function App() {
               ? `In call · ${brand.name}`
               : `${label} · ${brand.name}`;
   }, [resetToken, verifyToken, needsVerification, session, label, call.status]);
+
+  // Pick up new releases, but never in the middle of a call.
+  const callStatus = useRef(call.status);
+  useEffect(() => {
+    callStatus.current = call.status;
+  }, [call.status]);
+  useEffect(() => watchForUpdates(() => !isActive(callStatus.current)), []);
 
   // Warn before closing the tab mid-call.
   useEffect(() => {
