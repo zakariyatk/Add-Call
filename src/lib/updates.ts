@@ -6,12 +6,15 @@
  * is live, the tab reloads as soon as it isn't in a call.
  */
 
+import { isNativeApp } from './platform';
+
 const CHECK_EVERY_MS = 5 * 60_000;
 
 const scriptOf = (html: string) => /<script[^>]+type="module"[^>]+src="([^"]+)"/.exec(html)?.[1] ?? null;
 
 export function watchForUpdates(canReload: () => boolean): () => void {
-  if (import.meta.env.DEV) return () => {};
+  // The apps ship their code inside the app; store updates replace it.
+  if (import.meta.env.DEV || isNativeApp) return () => {};
   const running = document.querySelector<HTMLScriptElement>('script[type="module"][src]')?.getAttribute('src');
   if (!running) return () => {};
 

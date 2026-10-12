@@ -8,10 +8,15 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.117.3';
 import { AccessToken } from 'npm:livekit-server-sdk@2.19.1';
 
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? 'https://call.adddots.com,http://localhost:5174')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
+// The website, plus the Android and iOS apps (Capacitor serves them from these origins).
+const APP_ORIGINS = ['https://localhost', 'capacitor://localhost'];
+const ALLOWED_ORIGINS = [
+  ...(Deno.env.get('ALLOWED_ORIGINS') ?? 'https://call.adddots.com,http://localhost:5174')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean),
+  ...APP_ORIGINS,
+];
 
 const cors = (origin: string | null) => ({
   'Access-Control-Allow-Origin': origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],

@@ -146,6 +146,28 @@ over FTPS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). The
 uploaded [`.htaccess`](public/.htaccess) forces HTTPS and sets caching and
 security headers.
 
+## Android app
+
+The same app, wrapped with [Capacitor](https://capacitorjs.com) (`android/`,
+app id `com.adddots.call`). It uses the same accounts, Supabase project and
+LiveKit as the website. Sign-in is by email and password (Google doesn't allow
+its sign-in inside apps).
+
+One time: install [Android Studio](https://developer.android.com/studio) (it
+includes Java and the Android SDK).
+
+```bash
+npm run android    # build the web app, copy it into android/, open Android Studio
+```
+
+In Android Studio, connect your phone with USB debugging on (or start an
+emulator) and press **Run**. After changing the web code, run
+`npm run android:sync` and press Run again. `npm run icons` also refreshes the
+launcher icons.
+
+Calls ring while the app is open. Ringing when it's closed (full-screen
+incoming call) needs Firebase Cloud Messaging; that's the next step.
+
 ## Security model and limits
 
 **Accounts** (Supabase Auth)

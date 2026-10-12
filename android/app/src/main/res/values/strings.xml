@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Add Call</string>
+    <string name="title_activity_main">Add Call</string>
+    <string name="package_name">com.adddots.call</string>
+    <string name="custom_url_scheme">com.adddots.call</string>
+</resources>

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
 import { brand } from '../branding/brand.config';
 import { Lockup, LogoMark } from '../components/Logo';
+import { isNativeApp } from '../lib/platform';
 
 type Mode = 'signin' | 'signup' | 'forgot' | 'sent';
 
@@ -40,7 +41,8 @@ export function LoginScreen({
 
   useEffect(() => {
     void authApi.providers().then((p) => {
-      setGoogle(p.google);
+      // Google doesn't allow its sign-in inside an app's embedded browser.
+      setGoogle(p.google && !isNativeApp);
       setCanReset(p.passwordReset);
     });
   }, []);
