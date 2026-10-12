@@ -2,8 +2,8 @@ import type { EndReason } from './protocol';
 import type { CallRecord, Peer } from './types';
 
 /*
- * Call lifecycle as a pure reducer. The CallController feeds it signaling and
- * WebRTC events; the UI renders from it.
+ * Call lifecycle as a pure reducer. The CallController feeds it call-row and
+ * LiveKit events; the UI renders from it.
  *
  *   outgoing: idle → calling → ringing → connecting → connected → ended → idle
  *   incoming: idle → incoming → connecting → connected → ended → idle
@@ -123,6 +123,7 @@ export function connectedSeconds(state: CallState, now: number): number {
 /** The history entry for a call that has ended. */
 export function toRecord(state: CallState): CallRecord | null {
   if (state.status !== 'ended' || !state.peer || state.startedAt === null || !state.callId) return null;
+  if (state.endReason === 'elsewhere') return null; // the other tab or device keeps the record
   return {
     id: state.callId,
     peer: state.peer,
@@ -151,6 +152,8 @@ export function endReasonText(state: CallState): string {
       return 'Connection lost';
     case 'failed':
       return 'Call failed';
+    case 'elsewhere':
+      return 'Answered on another device';
     default:
       return 'Call ended';
   }

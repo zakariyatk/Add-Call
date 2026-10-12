@@ -15,7 +15,7 @@ export function useCalling(session: Session | null, prefs: CallPreferences, onRe
 
   useEffect(() => {
     if (!session) return;
-    controller.connect({ email: session.email, name: session.name });
+    controller.connect({ id: session.id, email: session.email, name: session.name });
     return () => controller.disconnect();
   }, [controller, session]);
 

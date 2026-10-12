@@ -1,21 +1,26 @@
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { brand } from '../branding/brand.config';
+import { supabase } from '../lib/supabase';
 import { callReducer, IDLE, isActive, toRecord, type CallAction, type CallState } from './callMachine';
-import { PeerSession } from './peer';
-import type { IceServer, PresenceUser, ServerMessage, SignalData, UserInfo } from './protocol';
+import type { MediaSession } from './media';
+import { RING_TIMEOUT_MS, type CallRow, type PresenceUser } from './protocol';
 import { Ringtone } from './ringtone';
-import { SignalingClient, type ConnectionStatus } from './signalingClient';
 import type { CallRecord, Peer } from './types';
 
 /*
- * Owns everything about calling for the signed-in user: the signaling socket,
- * camera / microphone, the WebRTC peer connection and the call state. React
+ * Owns everything about calling for the signed-in user: who's online
+ * (Supabase Realtime presence), ringing / answering / hanging up (rows in the
+ * `calls` table, changed through database functions and watched over
+ * Realtime), camera / microphone, the LiveKit room and the call state. React
  * subscribes to snapshots (see useCalling); nothing here depends on React.
  */
+
+export type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
 export interface CallSnapshot {
   call: CallState;
   connection: ConnectionStatus;
-  /** Everyone else online on this server. */
+  /** Everyone else online right now. */
   presence: PresenceUser[];
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
@@ -28,11 +33,22 @@ export interface CallPreferences {
   ringSound: boolean;
 }
 
+export interface CallUser {
+  id: string;
+  email: string;
+  name: string;
+}
+
+interface PresenceMeta {
+  email: string;
+  name: string;
+  busy: boolean;
+}
+
 /** How long the "Call ended" screen stays up. */
 const ENDED_SCREEN_MS = 1800;
 
-const newCallId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `c${Date.now()}${Math.random().toString(36).slice(2, 10)}`;
+const newCallId = () => crypto.randomUUID();
 
 function mediaError(err: unknown, video: boolean): string {
   const name = err instanceof DOMException ? err.name : '';
@@ -44,6 +60,9 @@ function mediaError(err: unknown, video: boolean): string {
   return 'Could not start your microphone.';
 }
 
+const peerOf = (row: CallRow, meId: string): Peer =>
+  row.caller_id === meId ? { email: row.callee_email, name: row.callee_name } : { email: row.caller_email, name: row.caller_name };
+
 export class CallController {
   private snapshot: CallSnapshot = {
     call: IDLE,
@@ -54,21 +73,16 @@ export class CallController {
     notice: null,
   };
   private listeners = new Set<() => void>();
-  private signaling: SignalingClient;
-  private me: UserInfo | null = null;
-  private iceServers: IceServer[] = [];
-  private peer: PeerSession | null = null;
+  private me: CallUser | null = null;
+  private online: RealtimeChannel | null = null;
+  private inbox: RealtimeChannel | null = null;
+  private media: MediaSession | null = null;
   private ringtone = new Ringtone();
   private resetTimer: number | null = null;
+  private ringTimer: number | null = null;
   private prefs: CallPreferences = { noiseSuppression: true, ringSound: true };
 
-  constructor(private readonly onRecord: (r: CallRecord) => void) {
-    this.signaling = new SignalingClient(
-      (m) => this.onServerMessage(m),
-      (connection) =>
-        this.set({ connection, ...(connection === 'replaced' ? { notice: `${brand.name} was opened in another tab or device.` } : {}) }),
-    );
-  }
+  constructor(private readonly onRecord: (r: CallRecord) => void) {}
 
   // ----- store interface for useSyncExternalStore -----
   subscribe = (fn: () => void) => {
@@ -87,18 +101,49 @@ export class CallController {
     const call = callReducer(before, action);
     if (call === before) return;
     this.set({ call });
+    if (isActive(call.status) !== isActive(before.status)) void this.trackPresence();
     if (call.status === 'ended' && before.status !== 'ended') this.onEnded(call);
   }
 
   // ----- lifecycle -----
-  connect(user: UserInfo) {
+  connect(user: CallUser) {
+    if (this.me?.id === user.id && this.online) return;
+    this.disconnect();
     this.me = user;
-    this.signaling.start();
+    this.set({ connection: 'connecting' });
+
+    // Calls to and from me. Row-level security only delivers rows I'm part of.
+    this.inbox = supabase
+      .channel(`calls:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'calls', filter: `callee_id=eq.${user.id}` }, (p) =>
+        this.onRow(p.new as CallRow),
+      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calls', filter: `caller_id=eq.${user.id}` }, (p) =>
+        this.onRow(p.new as CallRow),
+      )
+      .subscribe();
+
+    // Who's online: a private channel only signed-in users can join.
+    this.online = supabase
+      .channel('online', { config: { private: true, presence: { key: user.id } } })
+      .on('presence', { event: 'sync' }, () => this.syncPresence())
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          this.set({ connection: 'online' });
+          void this.trackPresence();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          this.set({ connection: 'connecting' }); // supabase-js retries on its own
+        } else if (status === 'CLOSED') {
+          this.set({ connection: 'offline', presence: [] });
+        }
+      });
   }
 
   disconnect() {
     if (isActive(this.snapshot.call.status)) this.hangUp();
-    this.signaling.stop();
+    for (const ch of [this.online, this.inbox]) if (ch) void supabase.removeChannel(ch);
+    this.online = this.inbox = null;
+    this.me = null;
     this.set({ connection: 'offline', presence: [] });
   }
 
@@ -111,45 +156,74 @@ export class CallController {
 
   // ----- actions -----
   dial = async (peer: Peer, video: boolean) => {
-    if (isActive(this.snapshot.call.status) || !this.me) return;
-    if (peer.email === this.me.email) return this.set({ notice: "You can't call yourself." });
+    const me = this.me;
+    if (isActive(this.snapshot.call.status) || !me) return;
+    if (peer.email === me.email) return this.set({ notice: "You can't call yourself." });
     if (this.snapshot.connection !== 'online') return this.set({ notice: `Not connected to ${brand.name}. Check your connection and try again.` });
     const callId = newCallId();
     this.clearReset();
     this.dispatch({ type: 'dial', callId, peer, video, at: Date.now() });
+
+    const online = this.snapshot.presence.find((p) => p.email === peer.email);
+    if (!online) return this.dispatch({ type: 'end', reason: 'offline', at: Date.now() });
+    if (online.busy) return this.dispatch({ type: 'end', reason: 'busy', at: Date.now() });
+
     const stream = await this.acquireMedia(video);
-    if (this.snapshot.call.callId !== callId || this.snapshot.call.status !== 'calling') {
+    if (!this.isCurrent(callId, 'calling')) {
       stream?.getTracks().forEach((t) => t.stop()); // hung up while the permission prompt was open
       return;
     }
     if (!stream) return this.dispatch({ type: 'end', reason: 'failed', at: Date.now() });
     this.dispatch({ type: 'setVideo', video: stream.getVideoTracks().length > 0 });
-    if (!this.signaling.send({ type: 'call', callId, to: peer.email, video })) this.dispatch({ type: 'end', reason: 'failed', at: Date.now() });
+
+    const { data, error } = await supabase.rpc('start_call', { p_id: callId, p_email: peer.email, p_video: video });
+    if (!this.isCurrent(callId, 'calling')) {
+      if (!error) void this.endRow(callId, 'cancelled');
+      return;
+    }
+    if (error) {
+      this.set({ notice: error.message || 'Could not place the call.' });
+      return this.dispatch({ type: 'end', reason: 'failed', at: Date.now() });
+    }
+    const row = data as CallRow;
+    this.dispatch({ type: 'ringing', callId, peer: peerOf(row, me.id) });
+    this.ringTimer = window.setTimeout(() => {
+      if (!this.isCurrent(callId, 'ringing')) return;
+      void this.endRow(callId, 'timeout');
+      this.dispatch({ type: 'end', reason: 'timeout', at: Date.now() });
+    }, RING_TIMEOUT_MS);
   };
 
   accept = async (video: boolean) => {
     const { call } = this.snapshot;
     if (call.status !== 'incoming' || !call.callId) return;
+    const callId = call.callId;
     this.ringtone.stop();
+    this.clearRingTimer();
     this.dispatch({ type: 'accept', video });
     const stream = await this.acquireMedia(video);
-    if (this.snapshot.call.callId !== call.callId || this.snapshot.call.status !== 'connecting') {
+    if (!this.isCurrent(callId, 'connecting')) {
       stream?.getTracks().forEach((t) => t.stop());
       return;
     }
     if (!stream) {
-      this.signaling.send({ type: 'decline', callId: call.callId });
+      void this.endRow(callId, 'failed');
       return this.dispatch({ type: 'end', reason: 'failed', at: Date.now() });
     }
     this.dispatch({ type: 'setVideo', video: stream.getVideoTracks().length > 0 });
-    this.createPeer('callee', call.callId, stream);
-    this.signaling.send({ type: 'accept', callId: call.callId });
+    const { error } = await supabase.rpc('answer_call', { p_id: callId });
+    if (!this.isCurrent(callId, 'connecting')) return;
+    if (error) {
+      this.set({ notice: error.message || 'This call has ended.' });
+      return this.dispatch({ type: 'end', reason: 'failed', at: Date.now() });
+    }
+    await this.joinMedia(callId, stream);
   };
 
   decline = () => {
     const { call } = this.snapshot;
     if (call.status !== 'incoming' || !call.callId) return;
-    this.signaling.send({ type: 'decline', callId: call.callId });
+    void this.endRow(call.callId, 'declined');
     this.dispatch({ type: 'end', reason: 'declined', at: Date.now() });
   };
 
@@ -157,15 +231,16 @@ export class CallController {
     const { call } = this.snapshot;
     if (!isActive(call.status) || !call.callId) return;
     if (call.status === 'incoming') return this.decline();
-    this.signaling.send({ type: 'hangup', callId: call.callId });
-    this.dispatch({ type: 'end', reason: call.status === 'calling' || call.status === 'ringing' ? 'cancelled' : 'hangup', at: Date.now() });
+    const reason = call.status === 'calling' || call.status === 'ringing' ? 'cancelled' : 'hangup';
+    void this.endRow(call.callId, reason);
+    this.dispatch({ type: 'end', reason, at: Date.now() });
   };
 
   toggleMute = () => {
     const muted = !this.snapshot.call.muted;
     this.snapshot.localStream?.getAudioTracks().forEach((t) => (t.enabled = !muted));
+    void this.media?.setMuted(muted);
     this.dispatch({ type: 'setMuted', muted });
-    this.sendMediaState();
   };
 
   toggleVideo = async () => {
@@ -176,7 +251,7 @@ export class CallController {
         t.stop();
         localStream.removeTrack(t);
       }
-      await this.peer?.setVideoTrack(null);
+      await this.media?.setVideoTrack(null);
       this.dispatch({ type: 'setVideo', video: false });
     } else {
       let track: MediaStreamTrack | undefined;
@@ -187,15 +262,24 @@ export class CallController {
       }
       if (!track || !isActive(this.snapshot.call.status)) return track?.stop();
       localStream.addTrack(track);
-      await this.peer?.setVideoTrack(track);
+      await this.media?.setVideoTrack(track);
       this.dispatch({ type: 'setVideo', video: true });
     }
     // A new MediaStream object makes React re-bind the local preview.
     this.set({ localStream: new MediaStream(localStream.getTracks()) });
-    this.sendMediaState();
   };
 
   // ----- internals -----
+  private isCurrent(callId: string, status: CallState['status']) {
+    const { call } = this.snapshot;
+    return call.callId === callId && call.status === status;
+  }
+
+  private async endRow(callId: string, reason: string) {
+    const { error } = await supabase.rpc('end_call', { p_id: callId, p_reason: reason });
+    if (error) console.warn('[calls] could not end call', error.message);
+  }
+
   private async acquireMedia(video: boolean): Promise<MediaStream | null> {
     const audio: MediaTrackConstraints = { echoCancellation: true, autoGainControl: true, noiseSuppression: this.prefs.noiseSuppression };
     const camera: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' };
@@ -223,80 +307,126 @@ export class CallController {
     }
   }
 
-  private createPeer(role: 'caller' | 'callee', callId: string, stream: MediaStream) {
-    this.peer?.close();
-    this.peer = new PeerSession(role, this.iceServers, stream, {
-      send: (data) => this.signaling.send({ type: 'signal', callId, data }),
-      onRemoteStream: (remoteStream) => this.set({ remoteStream }),
-      onConnectionState: (state) => {
-        if (state === 'connected') {
-          this.dispatch({ type: 'connected', at: Date.now() });
-          this.sendMediaState();
-        } else if (state === 'failed') {
-          this.signaling.send({ type: 'hangup', callId });
-          this.dispatch({ type: 'end', reason: 'failed', at: Date.now() });
-        }
+  /** Both sides join the call's LiveKit room once it's accepted. */
+  private async joinMedia(callId: string, stream: MediaStream) {
+    const fail = (message: string) => {
+      this.set({ notice: message });
+      void this.endRow(callId, 'failed');
+      this.dispatch({ type: 'end', reason: 'failed', at: Date.now(), callId });
+    };
+    const { data, error } = await supabase.functions.invoke<{ url: string; token: string }>('livekit-token', { body: { callId } });
+    if (!this.isCurrent(callId, 'connecting')) return;
+    if (error || !data) {
+      let message = 'Could not connect the call.';
+      try {
+        const body = await (error as { context?: Response })?.context?.json?.();
+        if (body?.error) message = body.error;
+      } catch {
+        /* keep the generic message */
+      }
+      return fail(message);
+    }
+
+    // LiveKit is large, so it loads only when the first call connects.
+    let MediaSessionClass: typeof MediaSession;
+    try {
+      ({ MediaSession: MediaSessionClass } = await import('./media'));
+    } catch {
+      return fail('Could not load calling. Check your connection and try again.');
+    }
+    if (!this.isCurrent(callId, 'connecting')) return;
+    this.media?.leave();
+    const media: MediaSession = new MediaSessionClass({
+      onRemoteStream: (remoteStream) => this.media === media && this.set({ remoteStream }),
+      onRemoteMedia: (state) => this.media === media && this.dispatch({ type: 'remoteMedia', ...state }),
+      onConnected: () => this.media === media && this.dispatch({ type: 'connected', at: Date.now() }),
+      onPeerLeft: () => {
+        if (this.media !== media || !isActive(this.snapshot.call.status)) return;
+        void this.endRow(callId, 'disconnected');
+        this.dispatch({ type: 'end', reason: 'disconnected', at: Date.now(), callId });
+      },
+      onDisconnected: () => {
+        if (this.media !== media || !isActive(this.snapshot.call.status)) return;
+        void this.endRow(callId, 'disconnected');
+        this.dispatch({ type: 'end', reason: 'disconnected', at: Date.now(), callId });
       },
     });
-  }
-
-  private sendMediaState() {
-    const { call } = this.snapshot;
-    if (!call.callId || !this.peer) return;
-    this.signaling.send({ type: 'signal', callId: call.callId, data: { media: { muted: call.muted, video: call.video } } });
-  }
-
-  private onServerMessage(msg: ServerMessage) {
-    const { call } = this.snapshot;
-    switch (msg.type) {
-      case 'welcome':
-        this.me = msg.you;
-        this.iceServers = msg.iceServers;
-        break;
-      case 'presence':
-        this.set({ presence: msg.users.filter((u) => u.email !== this.me?.email) });
-        break;
-      case 'incoming':
-        if (isActive(call.status)) {
-          this.signaling.send({ type: 'decline', callId: msg.callId });
-          break;
-        }
-        this.clearReset();
-        this.dispatch({ type: 'incoming', callId: msg.callId, peer: msg.from, video: msg.video, at: Date.now() });
-        if (this.prefs.ringSound) this.ringtone.start();
-        break;
-      case 'ringing':
-        this.dispatch({ type: 'ringing', callId: msg.callId, peer: msg.to });
-        break;
-      case 'accepted':
-        if (call.callId !== msg.callId || !this.snapshot.localStream) break;
-        this.dispatch({ type: 'accepted', callId: msg.callId });
-        this.createPeer('caller', msg.callId, this.snapshot.localStream);
-        void this.peer!.start().catch(() => this.hangUp());
-        break;
-      case 'signal':
-        if (call.callId !== msg.callId) break;
-        if ('media' in msg.data) this.dispatch({ type: 'remoteMedia', ...msg.data.media });
-        else void this.peer?.handle(msg.data as Exclude<SignalData, { media: unknown }>).catch(() => this.hangUp());
-        break;
-      case 'ended':
-        this.dispatch({ type: 'end', reason: msg.reason, at: Date.now(), callId: msg.callId });
-        break;
-      case 'error':
-        console.warn('[signaling]', msg.message);
-        break;
+    this.media = media;
+    try {
+      await media.join(data.url, data.token, stream);
+      if (this.snapshot.call.muted) await media.setMuted(true);
+    } catch (err) {
+      console.warn('[calls] LiveKit', err);
+      if (this.media === media && this.isCurrent(callId, 'connecting')) fail('Could not connect the call. Check your connection and try again.');
     }
+  }
+
+  private onRow(row: CallRow) {
+    const me = this.me;
+    if (!me || !row?.id) return;
+    const { call } = this.snapshot;
+    const mine = call.callId === row.id;
+
+    if (row.status === 'ended') {
+      if (mine) this.dispatch({ type: 'end', reason: row.end_reason ?? 'hangup', at: Date.now(), callId: row.id });
+      return;
+    }
+
+    if (row.callee_id === me.id) {
+      if (row.status === 'ringing' && !mine) {
+        if (Date.now() - Date.parse(row.created_at) > RING_TIMEOUT_MS) return; // stale
+        if (isActive(call.status)) return void this.endRow(row.id, 'busy');
+        this.clearReset();
+        this.dispatch({ type: 'incoming', callId: row.id, peer: peerOf(row, me.id), video: row.video, at: Date.now() });
+        if (this.prefs.ringSound) this.ringtone.start();
+        this.ringTimer = window.setTimeout(() => {
+          if (this.isCurrent(row.id, 'incoming')) this.dispatch({ type: 'end', reason: 'timeout', at: Date.now(), callId: row.id });
+        }, RING_TIMEOUT_MS);
+      } else if (row.status === 'accepted' && mine && call.status === 'incoming') {
+        // Picked up in another tab or on another device.
+        this.dispatch({ type: 'end', reason: 'elsewhere', at: Date.now(), callId: row.id });
+      }
+      return;
+    }
+
+    if (row.caller_id === me.id && row.status === 'accepted' && mine && (call.status === 'calling' || call.status === 'ringing')) {
+      this.clearRingTimer();
+      this.dispatch({ type: 'accepted', callId: row.id });
+      const stream = this.snapshot.localStream;
+      if (stream) void this.joinMedia(row.id, stream);
+    }
+  }
+
+  private syncPresence() {
+    const state = this.online?.presenceState<PresenceMeta>() ?? {};
+    const users: PresenceUser[] = [];
+    for (const [id, metas] of Object.entries(state)) {
+      if (id === this.me?.id || !metas.length) continue;
+      users.push({ email: metas[0].email, name: metas[0].name, busy: metas.some((m) => m.busy) });
+    }
+    this.set({ presence: users });
+  }
+
+  private async trackPresence() {
+    if (!this.online || !this.me || this.snapshot.connection !== 'online') return;
+    await this.online.track({ email: this.me.email, name: this.me.name, busy: isActive(this.snapshot.call.status) } satisfies PresenceMeta);
   }
 
   private onEnded(call: CallState) {
     this.ringtone.stop();
-    this.peer?.close();
-    this.peer = null;
+    this.clearRingTimer();
+    this.media?.leave();
+    this.media = null;
     this.snapshot.localStream?.getTracks().forEach((t) => t.stop());
     this.set({ localStream: null, remoteStream: null });
     const record = toRecord(call);
     if (record) this.onRecord(record);
     this.resetTimer = window.setTimeout(() => this.dispatch({ type: 'reset' }), ENDED_SCREEN_MS);
+  }
+
+  private clearRingTimer() {
+    if (this.ringTimer !== null) window.clearTimeout(this.ringTimer);
+    this.ringTimer = null;
   }
 
   private clearReset() {

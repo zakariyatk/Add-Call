@@ -70,6 +70,13 @@ describe('guards', () => {
     expect(toRecord(IDLE)).toBeNull();
   });
 
+  it('drops a call answered on another device without recording it', () => {
+    const s = run([incoming, { type: 'end', reason: 'elsewhere', at: 3_000, callId: 'call-2' }]);
+    expect(s.status).toBe('ended');
+    expect(endReasonText(s)).toBe('Answered on another device');
+    expect(toRecord(s)).toBeNull();
+  });
+
   it('counts connected time live', () => {
     const s = run([dial, { type: 'accepted', callId: 'call-1' }, { type: 'connected', at: 1_000 }]);
     expect(connectedSeconds(s, 11_500)).toBe(10);

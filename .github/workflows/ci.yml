@@ -20,3 +20,65 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+
+  # Uploads the built app to Hostinger (call.adddots.com) after every push to main.
+  # Pushes to other branches do a dry run: they log in over FTP and list what
+  # would change, without touching the site (a quick check that the secrets work).
+  # Needs repository secrets FTP_SERVER, FTP_USERNAME and FTP_PASSWORD (see README).
+  deploy:
+    needs: check
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://call.adddots.com
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      # Accepts FTP_SERVER pasted as "ftp://host:21/" or with stray spaces, and
+      # says what's wrong (without printing the secret) if it still isn't a host name.
+      - name: Check FTP secrets
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          if [ -z "$FTP_SERVER" ] || [ -z "$FTP_USERNAME" ] || [ -z "$FTP_PASSWORD" ]; then
+            echo "::error::Add the FTP_SERVER, FTP_USERNAME and FTP_PASSWORD secrets to deploy (see README)."
+            exit 1
+          fi
+          host=$(printf '%s' "$FTP_SERVER" | tr -d '[:space:]')
+          case "$host" in *://*) echo "::notice::FTP_SERVER started with a scheme (ftp:// or similar); removed it."; host=${host#*://} ;; esac
+          host=${host%%/*}
+          case "$host" in *:*) echo "::notice::FTP_SERVER had a port; removed it."; host=${host%%:*} ;; esac
+          echo "::add-mask::$host"
+          echo "::notice::FTP_SERVER (cleaned) is ${#host} characters, starting with '${host:0:1}' and ending with '${host: -1}'."
+          if ! [[ "$host" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] && ! getent hosts "$host" > /dev/null; then
+            echo "::error::FTP_SERVER is not a host name that exists. Use the FTP hostname or IP from hPanel → Files → FTP Accounts, e.g. ftp.adddots.com — nothing else."
+            exit 1
+          fi
+          echo "FTP_SERVER resolves. Connecting…"
+          # Step outputs drop masked values, so hand it on as an environment variable.
+          echo "FTP_HOST=$host" >> "$GITHUB_ENV"
+      - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ env.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: dist/
+          # The FTP account's folder for call.adddots.com (./ when the account opens there).
+          server-dir: ${{ vars.FTP_SERVER_DIR || './' }}
+          dangerous-clean-slate: false
+          dry-run: ${{ github.ref != 'refs/heads/main' }}
+          log-level: verbose

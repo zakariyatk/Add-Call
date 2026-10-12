@@ -54,7 +54,7 @@ export function VerifyEmailPending({ session, onVerified, onSignOut }: { session
     setBusy(true);
     setMessage(null);
     try {
-      await authApi.resendVerification();
+      await authApi.resendVerification(session.email);
       setMessage({ ok: true, text: 'Sent. The new link replaces any earlier ones.' });
     } catch (err) {
       setMessage({ ok: false, text: err instanceof AuthError ? err.message : 'Could not send the email. Please try again.' });
@@ -67,8 +67,8 @@ export function VerifyEmailPending({ session, onVerified, onSignOut }: { session
     <Card>
       <h1>Confirm your email</h1>
       <p className="muted">
-        We sent a link to <strong>{session.email}</strong>. Open it to start making calls on {brand.name}. It expires in 24
-        hours.
+        We sent a link to <strong>{session.email}</strong>. Open it to start making calls on {brand.name}. It expires in an
+        hour.
       </p>
       <p className="muted">Can't find it? Check your spam folder, or send a new one.</p>
       {message && (
@@ -139,7 +139,7 @@ export function VerifyEmailLink({
       <Card>
         <h1>This link has expired</h1>
         <p className="muted" role="alert">
-          Verification links work once and expire after 24 hours.{' '}
+          Verification links work once and expire after an hour.{' '}
           {session ? 'Continue to send yourself a new one.' : 'Sign in to send yourself a new one.'}
         </p>
         <button type="button" className="btn btn-primary btn-block" onClick={continueOn}>

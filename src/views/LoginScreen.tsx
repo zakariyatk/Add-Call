@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { AuthError, GOOGLE_SIGN_IN_URL, MIN_PASSWORD, authApi, type Session } from '../auth/api';
+import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
 import { brand } from '../branding/brand.config';
 import { Lockup, LogoMark } from '../components/Logo';
 
@@ -72,6 +72,17 @@ export function LoginScreen({
       setError(err instanceof AuthError ? err.message : 'Something went wrong. Please try again.');
       setPassword('');
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const continueWithGoogle = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await authApi.signInWithGoogle(); // leaves the page for Google
+    } catch (err) {
+      setError(err instanceof AuthError ? err.message : 'Google sign-in failed. Please try again.');
       setBusy(false);
     }
   };
@@ -157,10 +168,10 @@ export function LoginScreen({
 
             {google && (
               <>
-                <a className="btn btn-secondary btn-block btn-google" href={GOOGLE_SIGN_IN_URL}>
+                <button type="button" className="btn btn-secondary btn-block btn-google" onClick={continueWithGoogle} disabled={busy}>
                   <GoogleMark />
                   Continue with Google
-                </a>
+                </button>
                 <p className="divider" role="separator">
                   <span>or {signup ? 'sign up' : 'sign in'} with email</span>
                 </p>
