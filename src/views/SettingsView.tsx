@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import type { Session } from '../auth/api';
 import type { ConnectionStatus } from '../calls/CallController';
 import { disablePush, enablePush, pushState, type PushState } from '../calls/push';
 import { brand, type ThemeMode } from '../branding/brand.config';
@@ -56,8 +56,6 @@ export function SettingsView({
         </div>
         <UsernameRow session={session} username={username} onUsername={onUsername} />
       </div>
-
-      <ChangePassword hasPassword={session.hasPassword !== false} google={!!session.google} />
 
       <div className="card settings-section">
         <h2>Appearance</h2>
@@ -302,102 +300,3 @@ function CallNotifications() {
   );
 }
 
-function ChangePassword({ hasPassword: initiallyHasPassword, google }: { hasPassword: boolean; google: boolean }) {
-  const [hasPassword, setHasPassword] = useState(initiallyHasPassword);
-  const [open, setOpen] = useState(false);
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (next.length < MIN_PASSWORD) return setMessage({ ok: false, text: `Use at least ${MIN_PASSWORD} characters for your new password.` });
-    setBusy(true);
-    setMessage(null);
-    try {
-      await authApi.changePassword(current, next);
-      setMessage({
-        ok: true,
-        text: hasPassword ? 'Password changed. Other devices have been signed out.' : 'Password added. You can now also sign in with your email.',
-      });
-      setHasPassword(true);
-      setCurrent('');
-      setNext('');
-      setOpen(false);
-    } catch (err) {
-      setMessage({ ok: false, text: err instanceof AuthError ? err.message : 'Could not change your password.' });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="card settings-section">
-      <h2>Security</h2>
-      {google && (
-        <div className="setting-row">
-          <span>
-            <span className="setting-label">Google</span>
-            <span className="setting-hint">Connected — you can sign in with Google.</span>
-          </span>
-        </div>
-      )}
-      {!open ? (
-        <div className="setting-row">
-          <span>
-            <span className="setting-label">Password</span>
-            {message?.ok ? (
-              <span className="setting-hint" role="status">
-                {message.text}
-              </span>
-            ) : (
-              <span className="setting-hint">
-                {hasPassword ? 'Changing it signs you out on other devices.' : 'Add one to also sign in with your email.'}
-              </span>
-            )}
-          </span>
-          <button type="button" className="btn btn-secondary" onClick={() => (setOpen(true), setMessage(null))}>
-            {hasPassword ? 'Change' : 'Add password'}
-          </button>
-        </div>
-      ) : (
-        <form className="password-form" onSubmit={submit} noValidate>
-          {hasPassword && (
-            <label className="field">
-              <span>Current password</span>
-              <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} autoFocus />
-            </label>
-          )}
-          <label className="field">
-            <span>New password</span>
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={next}
-              onChange={(e) => setNext(e.target.value)}
-              aria-describedby="new-password-hint"
-              autoFocus={!hasPassword}
-            />
-            <span id="new-password-hint" className="field-hint">
-              At least {MIN_PASSWORD} characters.
-            </span>
-          </label>
-          {message && !message.ok && (
-            <p role="alert" className="form-error">
-              {message.text}
-            </p>
-          )}
-          <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => (setOpen(false), setMessage(null))}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={busy || (hasPassword && !current) || !next}>
-              {busy ? 'Saving…' : hasPassword ? 'Change password' : 'Add password'}
-            </button>
-          </div>
-        </form>
-      )}
-    </div>
-  );
-}

@@ -6,46 +6,34 @@ import { SUPABASE_KEY, SUPABASE_URL, supabase } from '../lib/supabase';
  * Accounts, backed by Supabase Auth. The rest of the app only sees `Session`
  * and `authApi`, so screens don't depend on Supabase directly.
  *
- * Emailed links point back into the app as /#/verify/<token_hash> and
- * /#/reset/<token_hash> (see supabase/email-templates), so they work on any
- * device, not just the browser that asked for them.
+ * There are no passwords: people sign in (and sign up) with a one-time code
+ * emailed to them, or with Google. The email also carries a link back into the
+ * app as /#/verify/<token_hash> (see supabase/templates), which signs in on
+ * whichever device opens it.
  */
 
 export interface Session {
-  /** Supabase user id; empty for an account still waiting on its emailed link. */
+  /** Supabase user id. */
   id: string;
   email: string;
   name: string;
-  /** False for accounts created with Google that never set a password. */
-  hasPassword?: boolean;
   /** Signed in with (or linked to) Google. */
   google?: boolean;
-  /** False until the address is confirmed via the emailed link (or Google). */
+  /** False until the address is confirmed (by a code, the emailed link or Google). */
   emailVerified?: boolean;
 }
 
 export interface Providers {
   google: boolean;
-  passwordReset: boolean;
-  /** New accounts must confirm their email before signing in. */
-  emailVerification: boolean;
 }
 
-/** Must match the minimum password length set in Supabase (Auth → Providers → Email). */
-export const MIN_PASSWORD = 8;
+/** Digits in an emailed sign-in code. Must match Supabase → Auth → Providers → Email → "Email OTP Length". */
+export const CODE_LENGTH = 6;
 
 /**
- * Reads (and removes) a password-reset token from a link like /#/reset/<token>.
+ * Reads (and removes) a sign-in token from an emailed link like /#/verify/<token>.
  * Removing it keeps the token out of browser history and later screenshots.
  */
-export function takeResetToken(): string | null {
-  const m = /^#\/reset\/([\w-]{20,100})$/.exec(window.location.hash);
-  if (!m) return null;
-  window.history.replaceState(null, '', window.location.pathname + window.location.search);
-  return m[1];
-}
-
-/** Reads (and removes) an email-verification token from a link like /#/verify/<token>. */
 export function takeVerifyToken(): string | null {
   const m = /^#\/verify\/([\w-]{20,100})$/.exec(window.location.hash);
   if (!m) return null;
@@ -82,15 +70,9 @@ function friendly(err: SupabaseAuthError | Error | null): AuthError {
   const e = err as (SupabaseAuthError & { code?: string; status?: number }) | null;
   const status = e?.status ?? 0;
   switch (e?.code) {
-    case 'invalid_credentials':
-      return new AuthError('Email or password is incorrect.', 400);
-    case 'user_already_exists':
-    case 'email_exists':
-      return new AuthError('An account with this email already exists. Sign in instead.', 409);
-    case 'weak_password':
-      return new AuthError(`Choose a stronger password (at least ${MIN_PASSWORD} characters).`, 422);
-    case 'same_password':
-      return new AuthError('Choose a password you haven\'t used here before.', 422);
+    case 'email_address_invalid':
+    case 'validation_failed':
+      return new AuthError('Enter a valid email address.', 400);
     case 'otp_expired':
     case 'flow_state_expired':
     case 'bad_jwt':
@@ -117,7 +99,6 @@ export function toSession(u: User): Session {
     id: u.id,
     email: (u.email ?? '').toLowerCase(),
     name: nameOf(u),
-    hasPassword: providers.has('email'),
     google: providers.has('google'),
     emailVerified: !!u.email_confirmed_at,
   };
@@ -130,14 +111,10 @@ export function sameSession(a: Session | null, b: Session | null): boolean {
     a.id === b.id &&
     a.email === b.email &&
     a.name === b.name &&
-    a.hasPassword === b.hasPassword &&
     a.google === b.google &&
     a.emailVerified === b.emailVerified
   );
 }
-
-/** An account that signed up but hasn't opened its emailed link yet (no real session). */
-const pending = (email: string, name = ''): Session => ({ id: '', email: email.trim().toLowerCase(), name, emailVerified: false });
 
 /** Where links and Google send people back to: this app, without any route. */
 const appUrl = () => window.location.origin + window.location.pathname;
@@ -162,37 +139,35 @@ export const authApi = {
     return () => data.subscription.unsubscribe();
   },
 
-  /** Which sign-in methods are switched on in Supabase. */
+  /** Whether "Continue with Google" is switched on in Supabase. */
   providers(): Promise<Providers> {
     providersCache ??= fetch(`${SUPABASE_URL}/auth/v1/settings`, {
       headers: { apikey: SUPABASE_KEY },
     })
-      .then((r) => r.json() as Promise<{ external?: { google?: boolean; email?: boolean }; mailer_autoconfirm?: boolean }>)
-      .then((s) => ({ google: !!s.external?.google, passwordReset: !!s.external?.email, emailVerification: !s.mailer_autoconfirm }))
+      .then((r) => r.json() as Promise<{ external?: { google?: boolean } }>)
+      .then((s) => ({ google: !!s.external?.google }))
       .catch(() => {
         providersCache = null;
-        return { google: false, passwordReset: true, emailVerification: true };
+        return { google: false };
       });
     return providersCache;
   },
 
-  async signIn(email: string, password: string): Promise<Session> {
-    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error?.code === 'email_not_confirmed') return pending(email);
-    if (error || !data.user) throw friendly(error);
-    return toSession(data.user);
+  /** Emails a sign-in code. A new address gets an account at the same time. */
+  async sendCode(email: string) {
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { shouldCreateUser: true, emailRedirectTo: appUrl() },
+    });
+    if (error) throw friendly(error);
   },
 
-  async signUp(name: string, email: string, password: string): Promise<Session> {
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: { data: { name: name.trim() }, emailRedirectTo: appUrl() },
-    });
+  /** Signs in with the emailed code. */
+  async verifyCode(email: string, code: string): Promise<Session> {
+    const { data, error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code, type: 'email' });
+    if (error?.code === 'otp_expired') throw new AuthError('That code is wrong or has expired. Check the latest email, or send a new code.', 400);
     if (error || !data.user) throw friendly(error);
-    // Supabase hides whether an address is taken by returning a user with no identities.
-    if (data.user.identities?.length === 0) throw friendly({ code: 'user_already_exists' } as SupabaseAuthError);
-    return data.session ? toSession(data.user) : pending(email, name.trim());
+    return toSession(data.user);
   },
 
   signInWithGoogle: async () => {
@@ -203,46 +178,10 @@ export const authApi = {
   /** Ends this browser's session only (other devices stay signed in). */
   signOut: async () => void (await supabase.auth.signOut({ scope: 'local' })),
 
-  /** Confirms an address from the emailed link, which also signs in on this browser. */
+  /** Signs in from the link in the emailed code message. */
   async verifyEmail(token: string): Promise<string | null> {
     const { data, error } = await supabase.auth.verifyOtp({ token_hash: token, type: 'email' });
     if (error) throw friendly(error);
     return data.user?.email?.toLowerCase() ?? null;
-  },
-
-  /** Emails a fresh confirmation link. */
-  async resendVerification(email: string) {
-    const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: appUrl() } });
-    if (error) throw friendly(error);
-  },
-
-  /** Emails a reset link if the account exists. Succeeds either way, by design. */
-  async forgotPassword(email: string) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: appUrl() });
-    if (error && error.status !== 400 && error.status !== 404) throw friendly(error);
-  },
-
-  /** Sets a new password from an emailed link, signs in, and signs out every other device. */
-  async resetPassword(token: string, password: string): Promise<Session> {
-    const { error: linkError } = await supabase.auth.verifyOtp({ token_hash: token, type: 'recovery' });
-    if (linkError) throw friendly(linkError);
-    const { data, error } = await supabase.auth.updateUser({ password });
-    if (error || !data.user) throw friendly(error);
-    await supabase.auth.signOut({ scope: 'others' });
-    return toSession(data.user);
-  },
-
-  /** Changes (or, for Google-only accounts, adds) a password and signs out other devices. */
-  async changePassword(currentPassword: string, newPassword: string) {
-    const { data: current } = await supabase.auth.getUser();
-    const user = current.user;
-    if (!user?.email) throw new AuthError('Sign in again to continue.', 401);
-    if (toSession(user).hasPassword) {
-      const { error } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword });
-      if (error) throw error.code === 'invalid_credentials' ? new AuthError('Your current password is incorrect.', 400) : friendly(error);
-    }
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) throw friendly(error);
-    await supabase.auth.signOut({ scope: 'others' });
   },
 };

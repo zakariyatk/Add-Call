@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { sameSession, type Session } from './api';
 
-const alice: Session = { id: 'a', email: 'a@x.com', name: 'Alice', hasPassword: true, google: false, emailVerified: true };
+const alice: Session = { id: 'a', email: 'a@x.com', name: 'Alice', google: false, emailVerified: true };
 
 describe('sameSession', () => {
   it('treats a token refresh for the same account as the same session', () => {

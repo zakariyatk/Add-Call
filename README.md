@@ -16,14 +16,11 @@ There is no server of our own to run.
 
 ## Features
 
-- **Accounts** (Supabase Auth): sign up and sign in with email and password, or
-  **Continue with Google**. Changing your password signs out your other
-  devices; Google users can add a password later.
-- **Email confirmation**: new accounts confirm their address with an emailed
-  link before they can sign in. The link works on any device.
-- **Forgot password**: an emailed link to choose a new password (works once,
-  expires after an hour). Resetting signs you in and signs out every other
-  device.
+- **Accounts** (Supabase Auth), no passwords: enter your email, then the
+  6-digit code emailed to you (phones offer it above the keyboard, and the app
+  signs in as soon as the code is complete). A new address gets an account
+  automatically. The email also has a **Sign in** button that signs in on
+  whichever device opens it. Or **Continue with Google**.
 - **Calls**: audio and video go through LiveKit, so calls connect even behind
   strict firewalls and mobile networks. Media is encrypted in transit.
 - **People**: everyone signed in right now, with presence ("On a call"), plus a
@@ -137,19 +134,18 @@ In the Supabase dashboard for **add-call**:
    host `smtp.hostinger.com`, port `465`, your mailbox address and password,
    sender name **Add Call**.
 3. **Authentication → Emails → Templates**: replace two templates with the
-   files in [`supabase/templates`](supabase/templates) (they send people to
-   the app's own `#/verify/` and `#/reset/` pages):
-   - **Confirm signup**: subject `Confirm your email for Add Call`, body
+   files in [`supabase/templates`](supabase/templates). Both show the sign-in
+   code (`{{ .Token }}`); new addresses get the first, existing accounts the
+   second:
+   - **Confirm signup**: subject `{{ .Token }} is your Add Call code`, body
      `confirm-signup.html`
-   - **Reset password**: subject `Reset your Add Call password`, body
-     `reset-password.html`
-   - Optional, under security notifications: **Password changed**, body
-     `password-changed.html`
+   - **Magic link**: subject `{{ .Token }} is your Add Call code`, body
+     `magic-link.html`
 
    Regenerate them after changing the branding with
    `npx vite-node scripts/generate-email-templates.ts`.
-4. **Authentication → Providers → Email**: keep **Confirm email** on, and set the
-   minimum password length to **8**.
+4. **Authentication → Providers → Email**: keep **Email** on and **Email OTP
+   Length** at **6** (it must match `CODE_LENGTH` in `src/auth/api.ts`).
 5. **Realtime → Settings**: turn off **Allow public access**, so only signed-in
    users can join channels.
 
@@ -218,10 +214,10 @@ Apply [`20261017090000_stickers.sql`](supabase/migrations/20261017090000_sticker
 ## Security model and limits
 
 **Accounts** (Supabase Auth)
-- Passwords are hashed by Supabase; the app never stores them. Sessions are
-  short-lived JWTs that refresh automatically.
-- New addresses must be confirmed before signing in, so nobody can register
-  someone else's email and receive their calls.
+- There are no passwords: signing in takes a single-use code sent to the
+  address (or Google), so nobody can use someone else's email and receive
+  their calls. Codes expire after an hour. Sessions are short-lived JWTs that
+  refresh automatically.
 - Supabase rate-limits sign-ins, sign-ups and emails.
 
 **Calls**
