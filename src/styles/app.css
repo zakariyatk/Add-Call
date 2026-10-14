@@ -1069,11 +1069,6 @@ label {
 .link-btn:hover {
   text-decoration-color: currentColor;
 }
-.field-row .link-btn {
-  font-size: 12px;
-  min-height: 32px;
-  text-decoration: none;
-}
 .login-switch {
   font-size: 14px;
   text-align: center;
@@ -1094,10 +1089,6 @@ label {
 .btn:disabled {
   opacity: 0.55;
   cursor: default;
-}
-.password-form {
-  display: grid;
-  gap: 14px;
 }
 .form-actions {
   display: flex;
@@ -1129,14 +1120,14 @@ label {
   background: var(--border);
 }
 
-/* ---------- password reset ---------- */
+/* ---------- emailed sign-in code ---------- */
 
-.forgot-link {
-  justify-self: end;
-  min-height: 32px;
-  font-size: 13px;
-  text-decoration: none;
-  margin-top: 2px;
+.field input.code-input {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.4em;
+  text-align: center;
+  padding-left: 0.4em; /* balances the trailing letter-spacing */
 }
 .reset-screen {
   min-height: 100%;

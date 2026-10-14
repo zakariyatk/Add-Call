@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { authApi, sameSession, takeAuthError, takeResetToken, takeVerifyToken, type Session } from './auth/api';
+import { authApi, sameSession, takeAuthError, takeVerifyToken, type Session } from './auth/api';
 import { brand } from './branding/brand.config';
 import { isActive } from './calls/callMachine';
 import { addToHistory, loadHistory } from './calls/history';
@@ -18,8 +18,7 @@ import { CallScreen } from './views/CallScreen';
 import { LoginScreen } from './views/LoginScreen';
 import { PeopleView } from './views/PeopleView';
 import { RecentsView } from './views/RecentsView';
-import { ResetPasswordScreen } from './views/ResetPasswordScreen';
-import { VerifyEmailLink, VerifyEmailPending } from './views/VerifyEmailScreen';
+import { VerifyEmailLink } from './views/VerifyEmailScreen';
 import { SettingsView } from './views/SettingsView';
 import { ChatsView } from './views/ChatsView';
 import { useChat } from './chat/useChat';
@@ -47,7 +46,6 @@ export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [signedOutNotice, setSignedOutNotice] = useState<string | null>(null);
   const [authError] = useState(takeAuthError);
-  const [resetToken, setResetToken] = useState(takeResetToken);
   const [verifyToken, setVerifyToken] = useState(takeVerifyToken);
   const [settings, setSettings] = useState<Settings>(() => loadSettings(store));
   const [route, setRoute] = useState(routeFromHash);
@@ -62,6 +60,15 @@ export default function App() {
   const enter = useCallback((s: Session | null) => {
     setSession((prev) => (prev !== undefined && sameSession(prev, s) ? prev : s));
   }, []);
+
+  /** An emailed sign-in link was opened: it signed in (or had expired). */
+  const finishLink = useCallback(
+    (s: Session | null) => {
+      setVerifyToken(null);
+      if (s) enter(s);
+    },
+    [enter],
+  );
 
   // Call history and the missed-call badge belong to the account's email.
   const accountEmail = session?.email ?? null;
@@ -86,15 +93,12 @@ export default function App() {
     return authApi.onChange((s) => {
       if (s) return enter(s);
       const prev = sessionRef.current;
-      if (prev && !prev.id) return; // keep a "confirm your email" screen up
       if (prev && !signingOut.current) setSignedOutNotice('You were signed out. Sign in again to continue.');
       signingOut.current = false;
       enter(null);
     });
   }, [enter]);
 
-  // Accounts that haven't opened their emailed link can't sign in or call yet.
-  const needsVerification = session?.emailVerified === false;
 
   useEffect(() => {
     applyTheme(settings.theme);
@@ -106,8 +110,6 @@ export default function App() {
       // An emailed link pasted into an already-open tab only changes the hash.
       const verify = takeVerifyToken();
       if (verify) return setVerifyToken(verify);
-      const reset = takeResetToken();
-      if (reset) return setResetToken(reset);
       setRoute(routeFromHash());
     };
     window.addEventListener('hashchange', onHash);
@@ -121,10 +123,10 @@ export default function App() {
     [session],
   );
   const prefs = useMemo(() => ({ noiseSuppression: settings.noiseSuppression, ringSound: settings.ringSound }), [settings]);
-  const calling = useCalling(session && !needsVerification ? session : null, prefs, addRecord);
+  const calling = useCalling(session ?? null, prefs, addRecord);
   const { call, controller, connection } = calling;
-  const signedInId = session && !needsVerification ? session.id : null;
-  const chat = useChat(session && !needsVerification ? session : null);
+  const signedInId = session ? session.id : null;
+  const chat = useChat(session ?? null);
   const chatController = chat.controller;
 
   useEffect(
@@ -206,18 +208,16 @@ export default function App() {
   const unreadChats = chat.unreadTotal;
 
   useEffect(() => {
-    document.title = resetToken
-      ? `Reset password · ${brand.name}`
-      : verifyToken || needsVerification
-        ? `Confirm your email · ${brand.name}`
-        : !session
+    document.title = verifyToken
+      ? `Signing in · ${brand.name}`
+      : !session
           ? `Sign in · ${brand.name}`
-          : call.status === 'incoming'
-            ? `Incoming call · ${brand.name}`
-            : isActive(call.status)
-              ? `In call · ${brand.name}`
-              : `${unreadChats ? `(${unreadChats}) ` : ''}${label} · ${brand.name}`;
-  }, [resetToken, verifyToken, needsVerification, session, label, call.status, unreadChats]);
+        : call.status === 'incoming'
+          ? `Incoming call · ${brand.name}`
+          : isActive(call.status)
+            ? `In call · ${brand.name}`
+            : `${unreadChats ? `(${unreadChats}) ` : ''}${label} · ${brand.name}`;
+  }, [verifyToken, session, label, call.status, unreadChats]);
 
   // Pick up new releases, but never in the middle of a call.
   const callStatus = useRef(call.status);
@@ -234,34 +234,14 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', onUnload);
   }, [call.status]);
 
-  // A reset link wins over everything else, signed in or not.
-  if (resetToken)
-    return (
-      <ResetPasswordScreen
-        key={resetToken}
-        token={resetToken}
-        onDone={(s) => {
-          setResetToken(null);
-          setSignedOutNotice(null);
-          navigate('recents');
-          enter(s);
-        }}
-        onCancel={() => setResetToken(null)}
-      />
-    );
-
+  // An emailed sign-in link wins over everything else, signed in or not.
   if (verifyToken)
     return (
       <VerifyEmailLink
-        // A fresh screen per link: each token is checked once, and a second link
-        // opened in this tab must not reuse the first one's result.
+        // A fresh screen per link: each token is checked once.
         key={verifyToken}
         token={verifyToken}
-        session={session}
-        onContinue={(s) => {
-          setVerifyToken(null);
-          if (s) enter(s);
-        }}
+        onContinue={finishLink}
       />
     );
 
@@ -280,19 +260,6 @@ export default function App() {
         onSignedIn={(s) => {
           setSignedOutNotice(null);
           enter(s);
-        }}
-      />
-    );
-
-  if (needsVerification)
-    return (
-      <VerifyEmailPending
-        session={session}
-        onVerified={enter}
-        onSignOut={() => {
-          signingOut.current = true;
-          void authApi.signOut().catch(() => {});
-          enter(null);
         }}
       />
     );

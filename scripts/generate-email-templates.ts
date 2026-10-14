@@ -4,8 +4,9 @@
  *
  *   npx vite-node scripts/generate-email-templates.ts
  *
- * Links go to /#/verify/<token_hash> and /#/reset/<token_hash> in the app,
- * which confirm them with supabase.auth.verifyOtp — so they work on any device.
+ * People sign in with the {{ .Token }} code. The button goes to
+ * /#/verify/<token_hash> in the app, which signs in with supabase.auth.verifyOtp
+ * on whichever device opens it.
  * `{{ … }}` are Supabase (Go template) placeholders.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -30,32 +31,31 @@ ${body}
 }
 
 const button = (link: string, label: string) =>
-  `<p style="margin:0 0 24px;"><a href="${link}" style="display:inline-block;background:${c.accent};color:${c.accentInk};text-decoration:none;font-weight:600;padding:12px 20px;border-radius:${brand.theme.radius - 4}px;">${label}</a></p>
-<p style="margin:0 0 8px;color:${c.textMuted};font-size:13px;">Or paste this link into your browser:<br><span style="word-break:break-all;">${link}</span></p>`;
+  `<p style="margin:0 0 16px;"><a href="${link}" style="display:inline-block;background:${c.accent};color:${c.accentInk};text-decoration:none;font-weight:600;padding:12px 20px;border-radius:${brand.theme.radius - 4}px;">${label}</a></p>`;
 
-const confirmLink = '{{ .SiteURL }}/#/verify/{{ .TokenHash }}';
-const resetLink = '{{ .SiteURL }}/#/reset/{{ .TokenHash }}';
+/** The code, large and easy to copy; phones also offer it above the keyboard. */
+const code = `<p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:8px;font-family:ui-monospace,Menlo,Consolas,monospace;">{{ .Token }}</p>`;
 
+const signInLink = '{{ .SiteURL }}/#/verify/{{ .TokenHash }}';
+
+const codeEmail = (intro: string) =>
+  layout(`<p style="margin:0 0 12px;">${greeting}</p>
+<p style="margin:0 0 16px;">${intro}</p>
+${code}
+<p style="margin:0 0 16px;color:${c.textMuted};font-size:13px;">Or, on this device, tap:</p>
+${button(signInLink, `Sign in to ${esc(brand.name)}`)}
+<p style="margin:16px 0 0;color:${c.textMuted};font-size:13px;">The code works once and expires in an hour. If you didn't ask for it, ignore this email.</p>`);
+
+// Supabase sends "Confirm signup" to new addresses and "Magic link" to existing
+// accounts; both carry the same code.
 const templates: Record<string, { subject: string; html: string }> = {
   'confirm-signup': {
-    subject: `Confirm your email for ${brand.name}`,
-    html: layout(`<p style="margin:0 0 12px;">${greeting}</p>
-<p style="margin:0 0 24px;">Welcome to ${esc(brand.name)}! Confirm this is your email address to start making calls.</p>
-${button(confirmLink, 'Confirm my email')}
-<p style="margin:16px 0 0;color:${c.textMuted};font-size:13px;">The link works once and expires in an hour. If you didn't create an account, ignore this email.</p>`),
+    subject: `{{ .Token }} is your ${brand.name} code`,
+    html: codeEmail(`Welcome to ${esc(brand.name)}! Enter this code to finish signing up:`),
   },
-  'reset-password': {
-    subject: `Reset your ${brand.name} password`,
-    html: layout(`<p style="margin:0 0 12px;">${greeting}</p>
-<p style="margin:0 0 24px;">Someone (hopefully you) asked to reset the password for your ${esc(brand.name)} account. The link below works once and expires in an hour.</p>
-${button(resetLink, 'Choose a new password')}
-<p style="margin:16px 0 0;color:${c.textMuted};font-size:13px;">If you didn't ask for this, ignore this email. Your password won't change.</p>`),
-  },
-  'password-changed': {
-    subject: `Your ${brand.name} password was changed`,
-    html: layout(`<p style="margin:0 0 12px;">${greeting}</p>
-<p style="margin:0 0 16px;">The password for your ${esc(brand.name)} account was just changed, and other devices were signed out.</p>
-<p style="margin:0;color:${c.textMuted};font-size:13px;">If this wasn't you, reset your password right away with "Forgot password?" at {{ .SiteURL }}</p>`),
+  'magic-link': {
+    subject: `{{ .Token }} is your ${brand.name} code`,
+    html: codeEmail(`Enter this code to sign in to ${esc(brand.name)}:`),
   },
 };
 

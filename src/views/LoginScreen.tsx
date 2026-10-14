@@ -1,9 +1,12 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { AuthError, CODE_LENGTH, authApi, type Session } from '../auth/api';
 import { brand } from '../branding/brand.config';
 import { Lockup, LogoMark } from '../components/Logo';
 
-type Mode = 'signin' | 'signup' | 'forgot' | 'sent';
+/** How long before "Send a new code" is offered. */
+const RESEND_AFTER_S = 30;
+
+const problem = (err: unknown, fallback = 'Something went wrong. Please try again.') => (err instanceof AuthError ? err.message : fallback);
 
 /** Google's "G" mark, as required by its sign-in branding guidelines. */
 function GoogleMark() {
@@ -17,6 +20,10 @@ function GoogleMark() {
   );
 }
 
+/**
+ * Sign in and sign up in one: enter an email, then the code we email to it.
+ * A new address gets an account automatically; there are no passwords.
+ */
 export function LoginScreen({
   onSignedIn,
   notice,
@@ -27,53 +34,68 @@ export function LoginScreen({
   /** An error to show on arrival, e.g. from a failed Google sign-in. */
   error?: string | null;
 }) {
-  const [mode, setMode] = useState<Mode>('signin');
-  const [name, setName] = useState('');
+  const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [busy, setBusy] = useState(false);
   const [google, setGoogle] = useState(false);
-  const [canReset, setCanReset] = useState(false);
-  const signup = mode === 'signup';
+  const [resendIn, setResendIn] = useState(0);
+  const verifying = useRef(false);
 
   useEffect(() => {
-    void authApi.providers().then((p) => {
-      setGoogle(p.google);
-      setCanReset(p.passwordReset);
-    });
+    void authApi.providers().then((p) => setGoogle(p.google));
   }, []);
 
-  const requestReset = async (e: FormEvent) => {
-    e.preventDefault();
-    if (busy) return;
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  const sendCode = async () => {
     setBusy(true);
     setError(null);
     try {
-      await authApi.forgotPassword(email.trim());
-      setMode('sent');
+      await authApi.sendCode(email);
+      setCode('');
+      setStep('code');
+      setResendIn(RESEND_AFTER_S);
     } catch (err) {
-      setError(err instanceof AuthError ? err.message : 'Something went wrong. Please try again.');
+      setError(problem(err));
     } finally {
       setBusy(false);
     }
   };
 
-  const submit = async (e: FormEvent) => {
+  const submitEmail = (e: FormEvent) => {
     e.preventDefault();
     if (busy) return;
-    if (signup && password.length < MIN_PASSWORD) return setError(`Use at least ${MIN_PASSWORD} characters for your password.`);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError('Enter a valid email address.');
+    void sendCode();
+  };
+
+  const verify = async (value: string) => {
+    if (verifying.current) return;
+    verifying.current = true;
     setBusy(true);
     setError(null);
     try {
-      onSignedIn(signup ? await authApi.signUp(name, email, password) : await authApi.signIn(email, password));
+      onSignedIn(await authApi.verifyCode(email, value));
     } catch (err) {
-      setError(err instanceof AuthError ? err.message : 'Something went wrong. Please try again.');
-      setPassword('');
-    } finally {
+      setError(problem(err));
+      setCode('');
       setBusy(false);
+    } finally {
+      verifying.current = false;
     }
+  };
+
+  // Typed, pasted or filled in by the phone: sign in as soon as the code is complete.
+  const onCode = (raw: string) => {
+    const digits = raw.replace(/\D/g, '').slice(0, CODE_LENGTH);
+    setCode(digits);
+    if (digits.length === CODE_LENGTH) void verify(digits);
   };
 
   const continueWithGoogle = async () => {
@@ -82,15 +104,9 @@ export function LoginScreen({
     try {
       await authApi.signInWithGoogle(); // leaves the page for Google
     } catch (err) {
-      setError(err instanceof AuthError ? err.message : 'Google sign-in failed. Please try again.');
+      setError(problem(err, 'Google sign-in failed. Please try again.'));
       setBusy(false);
     }
-  };
-
-  const switchMode = (m: Mode) => {
-    setMode(m);
-    setError(null);
-    setPassword('');
   };
 
   return (
@@ -104,61 +120,13 @@ export function LoginScreen({
       </aside>
 
       <main className="login-main">
-        {mode === 'forgot' || mode === 'sent' ? (
-          <form className="login-card" onSubmit={requestReset} noValidate aria-busy={busy}>
+        {step === 'email' ? (
+          <form className="login-card" onSubmit={submitEmail} noValidate aria-busy={busy}>
             <div className="login-brand">
               <Lockup size={36} />
             </div>
-            {mode === 'forgot' ? (
-              <>
-                <h1>Reset your password</h1>
-                <p className="muted">Enter your account's email and we'll send you a link to choose a new password.</p>
-                <label className="field">
-                  <span>Email</span>
-                  <input
-                    type="email"
-                    autoComplete="username"
-                    autoFocus
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                  />
-                </label>
-                {error && (
-                  <p role="alert" className="form-error">
-                    {error}
-                  </p>
-                )}
-                <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email.trim()}>
-                  {busy ? 'Sending…' : 'Send reset link'}
-                </button>
-              </>
-            ) : (
-              <>
-                <h1>Check your email</h1>
-                <p className="muted" role="status">
-                  If an account exists for <strong>{email.trim()}</strong>, a link to reset your password is on its way. It
-                  works once and expires in 1 hour. Check your spam folder if you don't see it.
-                </p>
-                <button type="button" className="btn btn-secondary btn-block" onClick={() => setMode('forgot')}>
-                  Use a different email
-                </button>
-              </>
-            )}
-            <p className="login-switch">
-              <button type="button" className="link-btn" onClick={() => switchMode('signin')}>
-                Back to sign in
-              </button>
-            </p>
-          </form>
-        ) : (
-          <form className="login-card" onSubmit={submit} noValidate aria-busy={busy}>
-            <div className="login-brand">
-              <Lockup size={36} />
-            </div>
-            <h1>{signup ? `Create your ${brand.name} account` : `Sign in to ${brand.name}`}</h1>
-            <p className="muted">{signup ? 'Free, and takes a few seconds.' : 'Welcome back. Enter your details to continue.'}</p>
+            <h1>Welcome to {brand.name}</h1>
+            <p className="muted">Enter your email and we'll send you a code. New here? Your account is created automatically.</p>
 
             {notice && !error && (
               <p className="form-notice" role="status">
@@ -173,64 +141,27 @@ export function LoginScreen({
                   Continue with Google
                 </button>
                 <p className="divider" role="separator">
-                  <span>or {signup ? 'sign up' : 'sign in'} with email</span>
+                  <span>or use your email</span>
                 </p>
               </>
             )}
 
-            {signup && (
-              <label className="field">
-                <span>Name</span>
-                <input type="text" autoComplete="name" required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
-              </label>
-            )}
             <label className="field">
               <span>Email</span>
               <input
                 type="email"
-                autoComplete={signup ? 'email' : 'username'}
+                inputMode="email"
+                autoComplete="email"
+                autoCapitalize="none"
                 autoFocus
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? 'login-error' : undefined}
               />
             </label>
-            <div className="field">
-              <span className="field-row">
-                <label htmlFor="password">Password</label>
-                <button
-                  type="button"
-                  className="link-btn"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-pressed={showPassword}
-                  aria-controls="password"
-                >
-                  {showPassword ? 'Hide password' : 'Show password'}
-                </button>
-              </span>
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete={signup ? 'new-password' : 'current-password'}
-                required
-                minLength={signup ? MIN_PASSWORD : undefined}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                aria-invalid={error ? true : undefined}
-                aria-describedby={error ? 'login-error' : signup ? 'password-hint' : undefined}
-              />
-              {signup && (
-                <span id="password-hint" className="field-hint">
-                  At least {MIN_PASSWORD} characters.
-                </span>
-              )}
-              {!signup && canReset && (
-                <button type="button" className="link-btn forgot-link" onClick={() => switchMode('forgot')}>
-                  Forgot password?
-                </button>
-              )}
-            </div>
 
             {error && (
               <p id="login-error" role="alert" className="form-error">
@@ -238,14 +169,75 @@ export function LoginScreen({
               </p>
             )}
 
-            <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
-              {busy ? (signup ? 'Creating account…' : 'Signing in…') : signup ? 'Create account' : 'Sign in'}
+            <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email.trim()}>
+              {busy ? 'Sending code…' : 'Continue'}
+            </button>
+          </form>
+        ) : (
+          <form
+            className="login-card"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (code.length === CODE_LENGTH) void verify(code);
+            }}
+            noValidate
+            aria-busy={busy}
+          >
+            <div className="login-brand">
+              <Lockup size={36} />
+            </div>
+            <h1>Enter your code</h1>
+            <p className="muted" role="status">
+              We sent a {CODE_LENGTH}-digit code to <strong>{email.trim()}</strong>. Check your spam folder if you don't see it.
+            </p>
+
+            <label className="field">
+              <span>Code</span>
+              <input
+                className="code-input"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]*"
+                maxLength={CODE_LENGTH}
+                autoFocus
+                required
+                value={code}
+                onChange={(e) => onCode(e.target.value)}
+                disabled={busy}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? 'login-error' : undefined}
+              />
+            </label>
+
+            {error && (
+              <p id="login-error" role="alert" className="form-error">
+                {error}
+              </p>
+            )}
+
+            <button type="submit" className="btn btn-primary btn-block" disabled={busy || code.length !== CODE_LENGTH}>
+              {busy ? 'Signing in…' : 'Sign in'}
             </button>
 
             <p className="login-switch">
-              {signup ? 'Already have an account?' : `New to ${brand.name}?`}{' '}
-              <button type="button" className="link-btn" onClick={() => switchMode(signup ? 'signin' : 'signup')}>
-                {signup ? 'Sign in' : 'Create an account'}
+              {resendIn > 0 ? (
+                <span className="muted">Send a new code in {resendIn}s</span>
+              ) : (
+                <button type="button" className="link-btn" onClick={() => void sendCode()} disabled={busy}>
+                  Send a new code
+                </button>
+              )}
+              {' · '}
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => {
+                  setStep('email');
+                  setError(null);
+                }}
+              >
+                Use a different email
               </button>
             </p>
           </form>

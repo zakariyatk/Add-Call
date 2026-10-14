@@ -5,10 +5,11 @@
 <tr><td style="padding:32px;font-family:&#39;Inter&#39;, ui-sans-serif, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, &#39;Helvetica Neue&#39;, Arial, sans-serif;color:#0A0A0A;font-size:15px;line-height:1.5;">
 <p style="margin:0 0 24px;font-size:18px;font-weight:700;letter-spacing:-0.02em;">Add Call</p>
 <p style="margin:0 0 12px;">{{ if .Data.name }}Hi {{ .Data.name }},{{ else if .Data.full_name }}Hi {{ .Data.full_name }},{{ else }}Hi,{{ end }}</p>
-<p style="margin:0 0 24px;">Welcome to Add Call! Confirm this is your email address to start making calls.</p>
-<p style="margin:0 0 24px;"><a href="{{ .SiteURL }}/#/verify/{{ .TokenHash }}" style="display:inline-block;background:#5B3DF5;color:#FFFFFF;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:10px;">Confirm my email</a></p>
-<p style="margin:0 0 8px;color:#62626A;font-size:13px;">Or paste this link into your browser:<br><span style="word-break:break-all;">{{ .SiteURL }}/#/verify/{{ .TokenHash }}</span></p>
-<p style="margin:16px 0 0;color:#62626A;font-size:13px;">The link works once and expires in an hour. If you didn't create an account, ignore this email.</p>
+<p style="margin:0 0 16px;">Welcome to Add Call! Enter this code to finish signing up:</p>
+<p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:8px;font-family:ui-monospace,Menlo,Consolas,monospace;">{{ .Token }}</p>
+<p style="margin:0 0 16px;color:#62626A;font-size:13px;">Or, on this device, tap:</p>
+<p style="margin:0 0 16px;"><a href="{{ .SiteURL }}/#/verify/{{ .TokenHash }}" style="display:inline-block;background:#5B3DF5;color:#FFFFFF;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:10px;">Sign in to Add Call</a></p>
+<p style="margin:16px 0 0;color:#62626A;font-size:13px;">The code works once and expires in an hour. If you didn't ask for it, ignore this email.</p>
 </td></tr></table>
 <p style="font-family:&#39;Inter&#39;, ui-sans-serif, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, &#39;Helvetica Neue&#39;, Arial, sans-serif;color:#62626A;font-size:12px;margin:16px 0 0;">Add Call · Calls, simply added.</p>
 </td></tr></table></body></html>
