@@ -16,8 +16,15 @@ body,
   height: 100%;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
   background: var(--background);
   color: var(--text);
   font-family: var(--font);
@@ -41,6 +48,14 @@ input {
 
 button {
   cursor: pointer;
+}
+
+button,
+a,
+input,
+label {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 :focus-visible {
@@ -95,15 +110,19 @@ button {
   background: var(--accent);
   color: var(--accent-ink);
 }
-.btn-primary:hover {
-  opacity: 0.92;
+@media (hover: hover) {
+  .btn-primary:hover {
+    opacity: 0.92;
+  }
 }
 .btn-secondary {
   background: var(--surface);
   border-color: var(--border);
 }
-.btn-secondary:hover {
-  background: var(--surface-muted);
+@media (hover: hover) {
+  .btn-secondary:hover {
+    background: var(--surface-muted);
+  }
 }
 .btn-block {
   width: 100%;
@@ -112,17 +131,19 @@ button {
 .icon-btn {
   display: inline-grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   flex: none;
   border-radius: 999px;
   border: 0;
   background: transparent;
   color: var(--text-muted);
 }
-.icon-btn:hover {
-  background: var(--surface-muted);
-  color: var(--text);
+@media (hover: hover) {
+  .icon-btn:hover {
+    background: var(--surface-muted);
+    color: var(--text);
+  }
 }
 
 .call-btn {
@@ -135,15 +156,17 @@ button {
   color: var(--accent-ink);
   transition: transform 0.12s, opacity 0.15s;
 }
-.call-btn:hover {
-  opacity: 0.92;
+@media (hover: hover) {
+  .call-btn:hover {
+    opacity: 0.92;
+  }
 }
 .call-btn:active {
   transform: scale(0.95);
 }
 .call-btn-md {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
 }
 .call-btn-lg {
   width: 68px;
@@ -196,6 +219,7 @@ button {
 .segmented button {
   border: 0;
   background: transparent;
+  min-height: 34px;
   padding: 6px 14px;
   border-radius: 999px;
   font-size: 13px;
@@ -307,7 +331,8 @@ button {
 .login-main {
   display: grid;
   place-items: center;
-  padding: 32px 16px;
+  padding: calc(32px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
 }
 .login-card {
   width: 100%;
@@ -362,6 +387,7 @@ button {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -391,9 +417,11 @@ button {
   padding: 10px 12px;
   border-radius: calc(var(--radius) - 4px);
 }
-.nav-item-side:hover {
-  background: var(--surface-muted);
-  color: var(--text);
+@media (hover: hover) {
+  .nav-item-side:hover {
+    background: var(--surface-muted);
+    color: var(--text);
+  }
 }
 .nav-item[aria-current='page'] {
   color: var(--text);
@@ -442,6 +470,9 @@ button {
 .sidebar-user-name {
   font-size: 13px;
   font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sidebar-user-email {
   font-size: 12px;
@@ -476,13 +507,14 @@ button {
     position: sticky;
     top: 0;
     z-index: 5;
-    padding: 12px 16px;
+    min-height: calc(56px + env(safe-area-inset-top));
+    padding: calc(10px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
     background: color-mix(in srgb, var(--background) 88%, transparent);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
   }
   .content {
-    padding: 20px 16px 24px;
+    padding: 20px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
   }
   .tabbar {
     display: grid;
@@ -490,7 +522,7 @@ button {
     position: sticky;
     bottom: 0;
     z-index: 5;
-    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    padding: 4px max(8px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: blur(12px);
     border-top: 1px solid var(--border);
@@ -498,9 +530,25 @@ button {
   .nav-item-tab {
     display: grid;
     justify-items: center;
-    gap: 2px;
+    align-content: center;
+    gap: 3px;
+    min-height: 52px;
     padding: 6px 0;
     font-size: 11px;
+    font-weight: 600;
+  }
+  .nav-item-tab[aria-current='page'] .nav-icon {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  .nav-item-tab .nav-icon {
+    width: 56px;
+    height: 30px;
+    place-items: center;
+    border-radius: 999px;
+  }
+  .nav-item-tab .badge {
+    top: -2px;
+    right: 8px;
   }
 }
 
@@ -510,6 +558,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -541,9 +590,7 @@ button {
 .list-title {
   font-weight: 600;
   letter-spacing: -0.01em;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -665,10 +712,14 @@ button {
 }
 .profile-name {
   font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .profile-email {
   font-size: 13px;
   color: var(--text-muted);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -691,6 +742,8 @@ button {
 }
 .about dd {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- call screen ---------- */
@@ -701,7 +754,10 @@ button {
   z-index: 50;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  padding: 24px 16px calc(40px + env(safe-area-inset-bottom));
+  padding: calc(24px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   /* A call is always shown on the dark palette (.always-dark), in both themes. */
   background: radial-gradient(120% 80% at 50% 0%, var(--surface-muted) 0%, var(--background) 60%);
   color: var(--text);
@@ -731,6 +787,7 @@ button {
   text-align: center;
 }
 .call-peer h1 {
+  overflow-wrap: anywhere;
   margin-top: 22px;
   font-size: 32px;
   font-weight: 700;
@@ -738,6 +795,7 @@ button {
 }
 .call-number {
   color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
 .call-status {
   margin-top: 6px;
@@ -804,8 +862,10 @@ button {
   color: var(--text);
   transition: background-color 0.15s, color 0.15s;
 }
-.call-control:hover .call-control-icon {
-  background: color-mix(in srgb, var(--text) 16%, transparent);
+@media (hover: hover) {
+  .call-control:hover .call-control-icon {
+    background: color-mix(in srgb, var(--text) 16%, transparent);
+  }
 }
 .call-control[aria-pressed='true'] .call-control-icon {
   background: var(--text);
@@ -834,6 +894,10 @@ button {
   cursor: default;
 }
 
+.notice > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .notice {
   display: flex;
   align-items: center;
@@ -926,9 +990,9 @@ button {
 .self-view {
   position: absolute;
   z-index: 2;
-  right: 16px;
-  top: 16px;
-  width: clamp(110px, 18vw, 220px);
+  right: max(16px, env(safe-area-inset-right));
+  top: calc(16px + env(safe-area-inset-top));
+  width: clamp(96px, 18vw, 220px);
   aspect-ratio: 4 / 3;
   object-fit: cover;
   border-radius: var(--radius);
@@ -979,6 +1043,7 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: 8px;
 }
 .field-hint {
   font-size: 12px;
@@ -1000,6 +1065,7 @@ button {
 }
 .field-row .link-btn {
   font-size: 12px;
+  min-height: 32px;
   text-decoration: none;
 }
 .login-switch {
@@ -1013,6 +1079,12 @@ button {
   border-radius: calc(var(--radius) - 4px);
   background: var(--surface-muted);
 }
+.btn:active:not(:disabled) {
+  opacity: 0.85;
+}
+.icon-btn:active:not(:disabled) {
+  background: var(--surface-muted);
+}
 .btn:disabled {
   opacity: 0.55;
   cursor: default;
@@ -1023,6 +1095,7 @@ button {
 }
 .form-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
@@ -1054,6 +1127,7 @@ button {
 
 .forgot-link {
   justify-self: end;
+  min-height: 32px;
   font-size: 13px;
   text-decoration: none;
   margin-top: 2px;
@@ -1063,4 +1137,108 @@ button {
 }
 .login-brand.is-visible {
   display: block;
+}
+
+/* ---------- tablets ---------- */
+
+@media (min-width: 761px) and (max-width: 1024px) {
+  .shell {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+}
+
+/* ---------- phones ---------- */
+
+@media (max-width: 760px) {
+  /* 16px stops iOS Safari from zooming into a focused field. */
+  .field input,
+  .search input {
+    font-size: 16px;
+    min-height: 48px;
+  }
+  .page-header h1 {
+    font-size: 26px;
+  }
+  .settings-section {
+    padding: 16px;
+  }
+  .setting-row {
+    min-height: 52px;
+  }
+  .setting-row > span:first-child {
+    min-width: 0;
+  }
+  .setting-row-wrap {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .setting-row-wrap .segmented {
+    flex: 1 1 220px;
+  }
+  .setting-row-wrap .segmented button {
+    flex: 1;
+  }
+  .profile.setting-row-wrap .profile-text {
+    flex: 1 1 140px;
+  }
+  .form-actions .btn {
+    flex: 1 1 auto;
+  }
+  .list-row {
+    gap: 12px;
+    padding: 10px 12px;
+    min-height: 64px;
+  }
+  .segmented button {
+    min-height: 36px;
+    padding: 6px 16px;
+  }
+  .notice {
+    padding: 4px 4px 4px 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .list-row {
+    gap: 10px;
+    padding: 10px;
+  }
+  .list-meta {
+    font-size: 12px;
+  }
+  .call-controls {
+    gap: 12px;
+  }
+  .call-control-icon {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+/* Phones held sideways: keep the call screen and sign-in usable in ~360px of height. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .call-screen {
+    padding-top: calc(12px + env(safe-area-inset-top));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  .call-avatar .avatar {
+    width: 72px !important;
+    height: 72px !important;
+    font-size: 27px !important;
+  }
+  .call-peer h1 {
+    margin-top: 10px;
+    font-size: 24px;
+  }
+  .call-control-icon {
+    width: 56px;
+    height: 56px;
+  }
+  .self-view {
+    width: clamp(96px, 16vw, 160px);
+  }
+  .login-main {
+    place-items: start center;
+    padding-top: calc(16px + env(safe-area-inset-top));
+  }
 }

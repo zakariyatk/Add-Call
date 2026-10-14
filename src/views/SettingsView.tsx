@@ -34,7 +34,7 @@ export function SettingsView({
 
       <div className="card settings-section">
         <h2>Account</h2>
-        <div className="profile">
+        <div className="profile setting-row-wrap">
           <Avatar name={session.name} size={48} />
           <span className="profile-text">
             <span className="profile-name">{session.name}</span>
@@ -50,7 +50,7 @@ export function SettingsView({
 
       <div className="card settings-section">
         <h2>Appearance</h2>
-        <div className="setting-row">
+        <div className="setting-row setting-row-wrap">
           <span className="setting-label" id="theme-label">Theme</span>
           <div className="segmented" role="radiogroup" aria-labelledby="theme-label">
             {THEMES.map((t) => (
