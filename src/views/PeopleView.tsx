@@ -4,7 +4,7 @@ import type { ConnectionStatus } from '../calls/CallController';
 import { type PresenceUser } from '../calls/protocol';
 import type { Peer } from '../calls/types';
 import { Icon } from '../components/Icon';
-import { Avatar, CallButton, EmptyState, PageHeader } from '../components/ui';
+import { Avatar, CallButton, EmptyState, PageHeader, PresenceAvatar } from '../components/ui';
 import { addContact, removeContact, useContactAction } from '../people/contacts';
 import { useUsername } from '../profile/avatars';
 import { findPerson, handle, type Person } from '../profile/username';
@@ -212,10 +212,7 @@ export function PeopleView({
 function PersonRow({ person, online, busy, actions }: { person: Person; online: boolean; busy: boolean; actions: ReactNode }) {
   return (
     <li className="list-row">
-      <span className="presence-avatar">
-        <Avatar name={person.name} email={person.email} />
-        {online && <span className={`presence-dot ${busy ? 'is-busy' : ''}`} aria-hidden="true" />}
-      </span>
+      <PresenceAvatar name={person.name} email={person.email} status={busy ? 'busy' : online ? 'online' : 'offline'} />
       <span className="list-main">
         <span className="list-title">{person.name}</span>
         <span className="list-sub">
@@ -244,10 +241,7 @@ function OnlineRow({
   const username = useUsername(user.email);
   return (
     <li className="list-row">
-      <span className="presence-avatar">
-        <Avatar name={user.name} email={user.email} />
-        <span className={`presence-dot ${user.busy ? 'is-busy' : ''}`} aria-hidden="true" />
-      </span>
+      <PresenceAvatar name={user.name} email={user.email} status={user.busy ? 'busy' : 'online'} />
       <span className="list-main">
         <span className="list-title">{user.name}</span>
         <span className="list-sub">{user.busy ? 'On a call' : handle(username, user.email)}</span>
