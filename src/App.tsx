@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { authApi, takeAuthError, takeResetToken, takeVerifyToken, type Session } from './auth/api';
+import { authApi, sameSession, takeAuthError, takeResetToken, takeVerifyToken, type Session } from './auth/api';
 import { brand } from './branding/brand.config';
 import { isActive } from './calls/callMachine';
 import { addToHistory, loadHistory } from './calls/history';
@@ -11,6 +11,7 @@ import { Icon } from './components/Icon';
 import { LogoMark } from './components/Logo';
 import { NAV, type ViewId } from './components/nav';
 import { browserStore, storageKey } from './lib/storage';
+import { keepRealtimeAwake } from './lib/supabase';
 import { watchForUpdates } from './lib/updates';
 import { applyTheme, loadSettings, saveSettings, type Settings } from './settings';
 import { CallScreen } from './views/CallScreen';
@@ -55,11 +56,21 @@ export default function App() {
   const [recentsSeen, setRecentsSeen] = useState(0);
   const [now, setNow] = useState(() => Date.now());
 
+  // Supabase reports the same sign-in again on every token refresh, from other
+  // tabs, and when the app comes back to the front. Keeping the same session
+  // object then keeps calls and chats connected instead of rebuilding them.
   const enter = useCallback((s: Session | null) => {
-    setSession(s);
-    setHistory(s ? loadHistory(store, s.email) : []);
-    setRecentsSeen(s ? Number(store.getItem(seenKey(s.email)) ?? 0) : 0);
+    setSession((prev) => (sameSession(prev ?? null, s) ? prev : s));
   }, []);
+
+  useEffect(() => keepRealtimeAwake(), []);
+
+  // Call history and the missed-call badge belong to the account's email.
+  const accountEmail = session?.email ?? null;
+  useEffect(() => {
+    setHistory(accountEmail ? loadHistory(store, accountEmail) : []);
+    setRecentsSeen(accountEmail ? Number(store.getItem(seenKey(accountEmail)) ?? 0) : 0);
+  }, [accountEmail]);
 
   /** True while this tab is signing out on purpose (so it isn't reported as "signed out elsewhere"). */
   const signingOut = useRef(false);
