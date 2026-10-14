@@ -62,8 +62,10 @@ There is no server of our own to run.
   list (only you can see it) shows who's online, with message and call
   buttons; Edit removes people. Calls and messages also work with anyone not
   in your list, and chats with them offer an Add button.
-- **Profile pictures**: Settings → Account → tap your picture to add or change
-  it (cropped to a square and shrunk before upload); Remove clears it. It shows
+- **Profile pictures**: Settings → Account → tap your picture for Take photo,
+  Choose photo, View photo or Remove photo. A new photo opens a move-and-scale
+  editor like WhatsApp's (drag to move, pinch / mouse wheel / slider to zoom,
+  round frame); Done saves what's in the circle (up to 512 × 512). It shows
   everywhere: chats, calls, People and the call screen.
 - **Recents**: your call history (incoming, outgoing, missed, video, duration),
   kept per account in this browser, with call-back.
