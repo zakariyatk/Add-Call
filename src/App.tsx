@@ -63,8 +63,6 @@ export default function App() {
     setSession((prev) => (sameSession(prev ?? null, s) ? prev : s));
   }, []);
 
-  useEffect(() => keepRealtimeAwake(), []);
-
   // Call history and the missed-call badge belong to the account's email.
   const accountEmail = session?.email ?? null;
   useEffect(() => {
@@ -128,6 +126,15 @@ export default function App() {
   const signedInId = session && !needsVerification ? session.id : null;
   const chat = useChat(session && !needsVerification ? session : null);
   const chatController = chat.controller;
+
+  useEffect(
+    () =>
+      keepRealtimeAwake(() => {
+        controller.wake();
+        chatController.wake();
+      }),
+    [controller, chatController],
+  );
 
   // Messages only push to people who aren't in the app right now.
   const presence = calling.presence;

@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { notifyMessage } from '../calls/notify';
+import { Rejoiner } from '../lib/rejoin';
 import { supabase } from '../lib/supabase';
 import { rememberAvatar } from '../profile/avatars';
 import { MAX_ATTACHMENT_BYTES, MAX_TEXT, mergeMessages, previewText, safeFileName, toConversation } from './format';
@@ -74,6 +75,10 @@ export class ChatController {
   /** Local previews (object URLs) of photos and voice notes this device sent. */
   private previews = new Map<string, string>();
   private isOnline: (email: string) => boolean = () => false;
+  /** Rebuilds the channel when the server drops it and it doesn't come back. */
+  private rejoiner = new Rejoiner(() => void this.rejoin());
+  /** A channel still being removed. */
+  private leaving: Promise<unknown> = Promise.resolve();
 
   constructor() {
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.onVisibility);
@@ -99,35 +104,66 @@ export class ChatController {
     this.disconnect();
     this.me = user;
     this.set({ ...EMPTY, connection: 'connecting' });
+    // supabase-js hands back a channel that is still closing instead of a new one.
+    void this.leaving.then(() => {
+      if (this.me === user && !this.inbox) this.join(user);
+    });
+  }
 
+  private join(user: ChatUser) {
+    this.set({ connection: 'connecting' });
+    this.rejoiner.schedule(); // in case the channel never answers
     const onRow = (p: { eventType: string; new: unknown }) => this.onRow(p.new as MessageRow, p.eventType === 'INSERT');
-    this.inbox = supabase
+    const inbox = supabase
       .channel(`chat:${user.id}`, { config: { private: true } })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `recipient_id=eq.${user.id}` }, onRow)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `recipient_id=eq.${user.id}` }, onRow)
       // My own messages: ticks, and messages sent from my other devices.
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `sender_id=eq.${user.id}` }, onRow)
-      .subscribe((status, err) => {
-        if (this.me !== user) return;
-        if (status === 'SUBSCRIBED') {
-          this.set({ connection: 'online' });
-          // Catch up on anything missed while connecting.
-          void this.refresh();
-          if (this.active) {
-            void this.loadMessages(this.active);
-            if (!this.typingChannel) this.joinTyping(this.active);
-          }
-          this.markDeliveredSoon();
-        } else {
-          if (status !== 'CLOSED') console.warn('[chat] channel', status, err?.message ?? '');
-          this.set({ connection: 'connecting' });
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `sender_id=eq.${user.id}` }, onRow);
+    this.inbox = inbox;
+    inbox.subscribe((status, err) => {
+      if (this.inbox !== inbox || this.me !== user) return; // removed on purpose
+      if (status === 'SUBSCRIBED') {
+        this.rejoiner.ok();
+        this.set({ connection: 'online' });
+        // Catch up on anything missed while connecting.
+        void this.refresh();
+        if (this.active) {
+          void this.loadMessages(this.active);
+          if (!this.typingChannel) this.joinTyping(this.active);
         }
-      });
+        this.markDeliveredSoon();
+      } else {
+        console.warn('[chat] channel', status, err?.message ?? '');
+        this.set({ connection: 'connecting' });
+        this.rejoiner.schedule();
+      }
+    });
+  }
+
+  /** Drops what is left of the channel and joins again, unless already back. Chats on screen stay. */
+  private async rejoin() {
+    const me = this.me;
+    if (!me || this.snapshot.connection === 'online') return;
+    this.leaveInbox();
+    await this.leaving;
+    if (this.me === me && !this.inbox) this.join(me);
+  }
+
+  /** The app came back to the front or the network returned: reconnect now if needed. */
+  wake() {
+    if (this.me && this.snapshot.connection !== 'online') this.rejoiner.now();
+  }
+
+  private leaveInbox() {
+    const inbox = this.inbox;
+    this.inbox = null;
+    if (inbox) this.leaving = Promise.all([this.leaving, supabase.removeChannel(inbox)]);
   }
 
   disconnect() {
-    if (this.inbox) void supabase.removeChannel(this.inbox);
-    this.inbox = null;
+    this.rejoiner.cancel();
+    this.leaveInbox();
     this.leaveTyping();
     // `active` stays: the same chat is still on screen when we reconnect.
     this.me = null;
