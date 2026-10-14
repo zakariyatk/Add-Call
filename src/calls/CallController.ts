@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { brand } from '../branding/brand.config';
+import { Rejoiner } from '../lib/rejoin';
 import { supabase } from '../lib/supabase';
 import { callReducer, IDLE, isActive, toRecord, type CallAction, type CallState } from './callMachine';
 import type { MediaSession } from './media';
@@ -93,6 +94,10 @@ export class CallController {
    * lapses once the call could no longer be ringing.
    */
   private answerOnArrival: { callId: string; until: number } | null = null;
+  /** Rebuilds the channels when the server drops them and they don't come back. */
+  private rejoiner = new Rejoiner(() => void this.rejoin());
+  /** Channels still being removed. */
+  private leaving: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly onRecord: (r: CallRecord) => void) {}
 
@@ -122,47 +127,83 @@ export class CallController {
     if (this.me?.id === user.id && this.online) return;
     this.disconnect();
     this.me = user;
+    this.set({ connection: 'connecting' });
+    // supabase-js hands back a channel that is still closing instead of a new one.
+    void this.leaving.then(() => {
+      if (this.me === user && !this.online) this.join(user);
+    });
+  }
+
+  private join(user: CallUser) {
     this.joined = { online: false, inbox: false };
     this.set({ connection: 'connecting' });
+    this.rejoiner.schedule(); // in case neither channel ever answers
 
     // Calls to and from me, on my own private channel (the project allows only
     // private channels). Row-level security only delivers rows I'm part of.
-    this.inbox = supabase
+    const inbox = supabase
       .channel(`calls:${user.id}`, { config: { private: true } })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calls', filter: `callee_id=eq.${user.id}` }, (p) =>
         this.onRow(p.new as CallRow),
       )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calls', filter: `caller_id=eq.${user.id}` }, (p) =>
         this.onRow(p.new as CallRow),
-      )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          this.setJoined('inbox', true);
-          void this.checkRinging();
-        } else {
-          if (status !== 'CLOSED') console.warn('[calls] incoming-call channel', status, err?.message ?? '');
-          this.setJoined('inbox', false);
-        }
-      });
+      );
+    this.inbox = inbox;
+    inbox.subscribe((status, err) => {
+      if (this.inbox !== inbox) return; // removed on purpose
+      if (status === 'SUBSCRIBED') {
+        this.setJoined('inbox', true);
+        void this.checkRinging();
+      } else {
+        console.warn('[calls] incoming-call channel', status, err?.message ?? '');
+        this.setJoined('inbox', false);
+      }
+    });
 
     // Who's online: a private channel only signed-in users can join.
-    this.online = supabase
+    const online = supabase
       .channel('online', { config: { private: true, presence: { key: user.id } } })
-      .on('presence', { event: 'sync' }, () => this.syncPresence())
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          this.setJoined('online', true);
-        } else {
-          this.setJoined('online', false); // supabase-js retries on its own
-          if (status === 'CLOSED') this.set({ presence: [] });
-        }
-      });
+      .on('presence', { event: 'sync' }, () => this.syncPresence());
+    this.online = online;
+    online.subscribe((status) => {
+      if (this.online !== online) return; // removed on purpose
+      if (status === 'SUBSCRIBED') {
+        this.setJoined('online', true);
+      } else {
+        this.setJoined('online', false);
+        if (status === 'CLOSED') this.set({ presence: [] });
+      }
+    });
+  }
+
+  /** Drops whatever is left of the channels and joins again, unless already back. */
+  private async rejoin() {
+    const me = this.me;
+    if (!me || this.snapshot.connection === 'online') return;
+    this.leaveChannels();
+    await this.leaving;
+    if (this.me === me && !this.online) this.join(me);
+  }
+
+  /** The app came back to the front or the network returned: reconnect now if needed. */
+  wake() {
+    if (this.me && this.snapshot.connection !== 'online') this.rejoiner.now();
+  }
+
+  /** Removes both channels; `leaving` settles once supabase-js has let go of them, so they can be joined afresh. */
+  private leaveChannels() {
+    const channels = [this.online, this.inbox].filter((ch): ch is RealtimeChannel => !!ch);
+    this.online = this.inbox = null;
+    if (channels.length) this.leaving = Promise.all([this.leaving, ...channels.map((ch) => supabase.removeChannel(ch))]);
   }
 
   private setJoined(channel: 'online' | 'inbox', joined: boolean) {
     this.joined = { ...this.joined, [channel]: joined };
     if (!this.me) return;
     const connection: ConnectionStatus = this.joined.online && this.joined.inbox ? 'online' : 'connecting';
+    if (connection === 'online') this.rejoiner.ok();
+    else this.rejoiner.schedule();
     if (connection === this.snapshot.connection) return;
     this.set({ connection });
     if (connection === 'online') void this.trackPresence();
@@ -186,8 +227,8 @@ export class CallController {
 
   disconnect() {
     if (isActive(this.snapshot.call.status)) this.hangUp();
-    for (const ch of [this.online, this.inbox]) if (ch) void supabase.removeChannel(ch);
-    this.online = this.inbox = null;
+    this.rejoiner.cancel();
+    this.leaveChannels();
     this.me = null;
     this.joined = { online: false, inbox: false };
     this.set({ connection: 'offline', presence: [] });
