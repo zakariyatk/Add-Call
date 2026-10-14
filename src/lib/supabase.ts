@@ -18,3 +18,24 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     autoRefreshToken: true,
   },
 });
+
+/**
+ * Phones pause background tabs, and the live connection (calls, chats, who's
+ * online) can die quietly meanwhile; the library would only notice at its next
+ * heartbeat. Reconnect straight away when the app comes back to the front or
+ * the network returns.
+ */
+export function keepRealtimeAwake(): () => void {
+  const wake = () => {
+    if (document.visibilityState === 'visible' && !supabase.realtime.isConnected()) supabase.realtime.connect();
+  };
+  document.addEventListener('visibilitychange', wake);
+  window.addEventListener('online', wake);
+  window.addEventListener('focus', wake);
+  return () => {
+    document.removeEventListener('visibilitychange', wake);
+    window.removeEventListener('online', wake);
+    window.removeEventListener('focus', wake);
+  };
+}
+

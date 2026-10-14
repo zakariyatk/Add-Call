@@ -123,6 +123,19 @@ export function toSession(u: User): Session {
   };
 }
 
+/** Whether two sessions describe the same signed-in account in the same state (tokens aside). */
+export function sameSession(a: Session | null, b: Session | null): boolean {
+  if (!a || !b) return a === b;
+  return (
+    a.id === b.id &&
+    a.email === b.email &&
+    a.name === b.name &&
+    a.hasPassword === b.hasPassword &&
+    a.google === b.google &&
+    a.emailVerified === b.emailVerified
+  );
+}
+
 /** An account that signed up but hasn't opened its emailed link yet (no real session). */
 const pending = (email: string, name = ''): Session => ({ id: '', email: email.trim().toLowerCase(), name, emailVerified: false });
 
