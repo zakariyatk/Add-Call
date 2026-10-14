@@ -7,7 +7,6 @@ import { Lockup } from './Logo';
 import { NAV, type ViewId } from './nav';
 import { Avatar } from './ui';
 
-
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
   online: 'Online',
   connecting: 'Connecting…',
@@ -44,7 +43,7 @@ export function AppShell({
         }}
       >
         <span className="nav-icon">
-          <Icon name={item.icon} size={variant === 'tab' ? 22 : 19} />
+          <Icon name={item.icon} size={variant === 'tab' ? 22 : 20} />
           {item.id === 'recents' && missedCount > 0 && (
             <span className="badge" aria-label={`${missedCount} missed`}>
               {missedCount}
@@ -79,7 +78,10 @@ export function AppShell({
 
       <header className="topbar">
         <Lockup size={28} />
-        <span className={`status-pill is-${connection}`}>{STATUS_LABEL[connection]}</span>
+        <span className={`status-pill is-${connection}`} role="status">
+          <span className="status-dot" aria-hidden="true" />
+          {STATUS_LABEL[connection]}
+        </span>
       </header>
 
       <main className="content" id="main">

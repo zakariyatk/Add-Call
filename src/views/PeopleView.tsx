@@ -19,7 +19,10 @@ export function PeopleView({
 }) {
   const [address, setAddress] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const online = [...presence].sort((a, b) => a.name.localeCompare(b.name));
+  const query = address.trim().toLowerCase();
+  const online = [...presence]
+    .filter((p) => !query || p.name.toLowerCase().includes(query) || p.email.includes(query))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const callAddress = (video: boolean) => (e?: FormEvent) => {
     e?.preventDefault();
@@ -32,20 +35,27 @@ export function PeopleView({
 
   return (
     <section>
-      <PageHeader title="People" />
+      <PageHeader title="Contacts" />
 
       <form className="card dial-form" onSubmit={callAddress(false)} noValidate>
         <label className="field">
-          <span>Call someone on {brand.name}</span>
-          <input
-            type="email"
-            inputMode="email"
-            placeholder="name@example.com"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
+          <span>Find or call someone on {brand.name}</span>
+          <span className="search">
+            <Icon name="search" size={18} />
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="off"
+              placeholder="Name or email address"
+              value={address}
+              onChange={(e) => {
+                setAddress(e.target.value);
+                if (error) setError(null);
+              }}
             aria-invalid={error ? true : undefined}
-            aria-describedby={error ? 'dial-error' : undefined}
-          />
+              aria-describedby={error ? 'dial-error' : undefined}
+            />
+          </span>
         </label>
         <div className="dial-actions">
           <button type="button" className="btn btn-secondary" onClick={callAddress(true)}>
@@ -65,11 +75,29 @@ export function PeopleView({
       <h2 className="group-label">
         Online now{online.length > 0 && ` · ${online.length}`}
       </h2>
-      {connection !== 'online' ? (
-        <EmptyState>{connection === 'connecting' ? 'Connecting…' : `Not connected to ${brand.name}. Reconnecting…`}</EmptyState>
+      {connection === 'connecting' ? (
+        <div className="list card" aria-busy="true" aria-label="Loading contacts">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="list-row skeleton-row" aria-hidden="true">
+              <span className="skeleton skeleton-avatar" />
+              <span className="list-main">
+                <span className="skeleton skeleton-line" />
+                <span className="skeleton skeleton-line is-short" />
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : connection === 'offline' ? (
+        <EmptyState icon="wifiOff" title="You're offline">
+          Not connected to {brand.name}. Reconnecting…
+        </EmptyState>
+      ) : online.length === 0 && query ? (
+        <EmptyState icon="search" title="No one online matches">
+          You can still call any email address with the buttons above.
+        </EmptyState>
       ) : online.length === 0 ? (
-        <EmptyState>
-          No one else is online. Open {brand.name} in another browser and sign in with a different email to try a call.
+        <EmptyState icon="users" title="No one else is online">
+          Open {brand.name} in another browser and sign in with a different email to try a call.
         </EmptyState>
       ) : (
         <ul className="list card">
@@ -91,7 +119,7 @@ export function PeopleView({
                 disabled={u.busy}
                 onClick={() => onCall(u, true)}
               >
-                <Icon name="video" size={18} />
+                <Icon name="video" size={20} />
               </button>
               <CallButton label={`Call ${u.name}`} disabled={u.busy} onClick={() => onCall(u, false)} />
             </li>

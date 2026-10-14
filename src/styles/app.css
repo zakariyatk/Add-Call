@@ -10,6 +10,23 @@
   box-sizing: border-box;
 }
 
+/* Layout tokens. Safe-area insets are 0 on devices without notches or gesture bars. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --gutter: 16px;
+  --topbar-h: 56px;
+  --tabbar-h: 64px;
+  --tap: 44px;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html,
 body,
 #root {
@@ -18,6 +35,7 @@ body,
 
 body {
   margin: 0;
+  overflow-x: hidden;
   background: var(--background);
   color: var(--text);
   font-family: var(--font);
@@ -41,6 +59,17 @@ input {
 
 button {
   cursor: pointer;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+img,
+video {
+  max-width: 100%;
 }
 
 :focus-visible {
@@ -112,8 +141,8 @@ button {
 .icon-btn {
   display: inline-grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: var(--tap);
+  height: var(--tap);
   flex: none;
   border-radius: 999px;
   border: 0;
@@ -142,8 +171,8 @@ button {
   transform: scale(0.95);
 }
 .call-btn-md {
-  width: 40px;
-  height: 40px;
+  width: var(--tap);
+  height: var(--tap);
 }
 .call-btn-lg {
   width: 68px;
@@ -194,6 +223,7 @@ button {
   background: var(--surface-muted);
 }
 .segmented button {
+  min-height: 34px;
   border: 0;
   background: transparent;
   padding: 6px 14px;
@@ -261,7 +291,8 @@ button {
 /* ---------- sign in ---------- */
 
 .login {
-  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
@@ -275,19 +306,6 @@ button {
   padding: 64px;
   position: relative;
   overflow: hidden;
-}
-.login-hero::after {
-  content: '';
-  position: absolute;
-  right: -160px;
-  bottom: -160px;
-  width: 420px;
-  height: 420px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-  box-shadow:
-    0 0 0 60px color-mix(in srgb, var(--text) 2%, transparent),
-    0 0 0 120px color-mix(in srgb, var(--text) 1.5%, transparent);
 }
 .login-hero-mark {
   margin-bottom: 36px;
@@ -307,7 +325,9 @@ button {
 .login-main {
   display: grid;
   place-items: center;
-  padding: 32px 16px;
+  min-width: 0;
+  padding: calc(32px + var(--safe-top)) calc(var(--gutter) + var(--safe-right)) calc(32px + var(--safe-bottom))
+    calc(var(--gutter) + var(--safe-left));
 }
 .login-card {
   width: 100%;
@@ -352,20 +372,29 @@ button {
 
 /* ---------- app shell ---------- */
 
+/*
+ * Desktop (>= 1024px): full sidebar. Tablets and landscape phones (761–1023px):
+ * a compact icon rail. Phones (<= 760px): top bar plus a fixed bottom tab bar,
+ * with the page padded so nothing scrolls underneath either.
+ */
+
 .shell {
-  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
 }
 
 .sidebar {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 22px 14px 16px;
+  padding: calc(22px + var(--safe-top)) 14px calc(16px + var(--safe-bottom)) calc(14px + var(--safe-left));
   border-right: 1px solid var(--border);
   background: var(--surface);
 }
@@ -373,6 +402,7 @@ button {
   color: inherit;
   text-decoration: none;
   padding: 4px 10px;
+  border-radius: calc(var(--radius) - 4px);
 }
 .sidebar nav {
   display: grid;
@@ -388,8 +418,10 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  min-height: var(--tap);
+  padding: 0 12px;
   border-radius: calc(var(--radius) - 4px);
+  transition: background-color 0.15s, color 0.15s;
 }
 .nav-item-side:hover {
   background: var(--surface-muted);
@@ -399,12 +431,13 @@ button {
   color: var(--text);
 }
 .nav-item-side[aria-current='page'] {
-  background: var(--surface-muted);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   font-weight: 650;
 }
 .nav-icon {
   position: relative;
   display: inline-grid;
+  place-items: center;
 }
 .nav-item[aria-current='page'] .nav-icon {
   color: var(--accent);
@@ -413,17 +446,19 @@ button {
   position: absolute;
   top: -6px;
   right: -9px;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   border-radius: 999px;
   background: var(--danger);
   color: var(--danger-ink);
   font-size: 10px;
   font-weight: 700;
+  line-height: 1;
   display: grid;
   place-items: center;
   border: 2px solid var(--surface);
+  font-variant-numeric: tabular-nums;
 }
 
 .sidebar-user {
@@ -431,7 +466,7 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 6px 0 10px;
+  padding: 12px 0 0 10px;
   border-top: 1px solid var(--border);
 }
 .sidebar-user-text {
@@ -442,6 +477,9 @@ button {
 .sidebar-user-name {
   font-size: 13px;
   font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sidebar-user-email {
   font-size: 12px;
@@ -457,15 +495,54 @@ button {
 }
 
 .content {
-  padding: 36px clamp(16px, 4vw, 56px) 48px;
-  max-width: 880px;
   width: 100%;
+  max-width: 920px;
+  min-width: 0;
+  margin-inline: auto;
+  padding: 36px clamp(16px, 4vw, 56px) calc(48px + var(--safe-bottom));
 }
 
+/* Tablets and landscape phones: icon rail with labels underneath. */
+@media (min-width: 761px) and (max-width: 1023px) {
+  .shell {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+  .sidebar {
+    align-items: center;
+    gap: 20px;
+    padding-inline: calc(8px + var(--safe-left)) 8px;
+  }
+  .sidebar-brand {
+    padding: 4px;
+  }
+  .sidebar .wordmark,
+  .sidebar-user-text {
+    display: none;
+  }
+  .sidebar nav {
+    width: 100%;
+    gap: 6px;
+  }
+  .nav-item-side {
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    min-height: 60px;
+    padding: 6px 0;
+    font-size: 12px;
+  }
+  .sidebar-user {
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 0 0;
+  }
+}
+
+/* Phones. */
 @media (max-width: 760px) {
   .shell {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto 1fr;
   }
   .sidebar {
     display: none;
@@ -473,34 +550,89 @@ button {
   .topbar {
     display: flex;
     align-items: center;
+    gap: 12px;
     position: sticky;
     top: 0;
-    z-index: 5;
-    padding: 12px 16px;
-    background: color-mix(in srgb, var(--background) 88%, transparent);
-    backdrop-filter: blur(12px);
+    z-index: 20;
+    min-height: calc(var(--topbar-h) + var(--safe-top));
+    padding: var(--safe-top) calc(var(--gutter) + var(--safe-right)) 0 calc(var(--gutter) + var(--safe-left));
+    background: color-mix(in srgb, var(--background) 92%, transparent);
+    backdrop-filter: saturate(1.4) blur(12px);
+    -webkit-backdrop-filter: saturate(1.4) blur(12px);
     border-bottom: 1px solid var(--border);
   }
   .content {
-    padding: 20px 16px 24px;
+    max-width: none;
+    padding: 20px calc(var(--gutter) + var(--safe-right)) calc(var(--tabbar-h) + var(--safe-bottom) + 24px)
+      calc(var(--gutter) + var(--safe-left));
   }
   .tabbar {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    position: sticky;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    position: fixed;
+    left: 0;
+    right: 0;
     bottom: 0;
-    z-index: 5;
-    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
-    background: color-mix(in srgb, var(--surface) 92%, transparent);
-    backdrop-filter: blur(12px);
+    z-index: 20;
+    height: calc(var(--tabbar-h) + var(--safe-bottom));
+    padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+    background: var(--surface);
     border-top: 1px solid var(--border);
   }
   .nav-item-tab {
-    display: grid;
-    justify-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    font-size: 12px;
+    letter-spacing: 0.01em;
+  }
+  .nav-item-tab .nav-icon {
+    width: 56px;
+    height: 30px;
+    border-radius: 999px;
+    transition: background-color 0.15s;
+  }
+  .nav-item-tab[aria-current='page'] {
+    font-weight: 650;
+  }
+  .nav-item-tab[aria-current='page'] .nav-icon {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  .nav-item-tab .badge {
+    top: -3px;
+    right: 6px;
+  }
+  .nav-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Short screens (small phones in landscape): slimmer bars leave room for content. */
+@media (max-width: 760px) and (max-height: 500px) {
+  :root {
+    --topbar-h: 48px;
+    --tabbar-h: 52px;
+  }
+  .nav-item-tab {
+    flex-direction: row;
     gap: 2px;
-    padding: 6px 0;
-    font-size: 11px;
+  }
+}
+
+/* Touch phones: the on-screen keyboard shrinks the viewport, so the tab bar
+   steps aside while typing instead of sitting on top of the field. */
+@media (max-width: 760px) and (hover: none) {
+  .shell:has(.content input:focus) .tabbar {
+    display: none;
+  }
+  .shell:has(.content input:focus) .content {
+    padding-bottom: calc(24px + var(--safe-bottom));
   }
 }
 
@@ -508,15 +640,17 @@ button {
 
 .page-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 20px;
 }
 .page-header h1 {
-  font-size: 28px;
+  font-size: clamp(24px, 6vw, 28px);
   font-weight: 700;
   letter-spacing: -0.035em;
+  line-height: 1.15;
 }
 
 .list {
@@ -525,12 +659,20 @@ button {
   padding: 4px 0;
 }
 .list-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 14px;
+  gap: 12px;
+  min-height: 68px;
+  padding: 10px 10px 10px 14px;
 }
-.list-row + .list-row {
+/* Separators start after the avatar, as in most messaging apps. */
+.list-row + .list-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 66px;
+  right: 0;
   border-top: 1px solid var(--border);
 }
 .list-main {
@@ -541,9 +683,7 @@ button {
 .list-title {
   font-weight: 600;
   letter-spacing: -0.01em;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -564,9 +704,11 @@ button {
   margin-right: 5px;
 }
 .list-meta {
-  font-size: 13px;
+  flex: none;
+  font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .dir {
   display: inline-block;
@@ -582,7 +724,6 @@ button {
 .search {
   position: relative;
   display: block;
-  margin-bottom: 20px;
 }
 .search svg {
   position: absolute;
@@ -590,6 +731,7 @@ button {
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
+  pointer-events: none;
 }
 .search input {
   padding-left: 42px;
@@ -603,13 +745,69 @@ button {
   font-weight: 700;
   color: var(--text-muted);
   letter-spacing: 0.06em;
+  text-transform: uppercase;
   margin: 0 0 8px 4px;
 }
 
 .empty {
-  padding: 48px 16px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 40px 16px;
   text-align: center;
   color: var(--text-muted);
+  font-size: 14px;
+}
+.empty > p:last-child {
+  max-width: 36ch;
+}
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+}
+.empty-title {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+/* Loading placeholders. */
+.skeleton {
+  display: block;
+  background: var(--surface-muted);
+  border-radius: 6px;
+  animation: skeleton 1s ease-in-out infinite alternate;
+}
+.skeleton-avatar {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+}
+.skeleton-line {
+  width: 55%;
+  height: 12px;
+}
+.skeleton-line.is-short {
+  width: 35%;
+  margin-top: 8px;
+}
+@keyframes skeleton {
+  to {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
 }
 
 /* ---------- settings ---------- */
@@ -635,11 +833,18 @@ button {
 }
 .setting-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px 16px;
+  min-height: 52px;
   padding: 10px 0;
   cursor: pointer;
+}
+/* Text takes the room; a control that no longer fits drops below it. */
+.setting-row > span:first-child {
+  flex: 1 1 9rem;
+  min-width: 0;
 }
 .setting-row + .setting-row {
   border-top: 1px solid var(--border);
@@ -655,11 +860,12 @@ button {
 }
 .profile {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 12px 14px;
 }
 .profile-text {
-  flex: 1;
+  flex: 1 1 9rem;
   min-width: 0;
   display: grid;
 }
@@ -671,6 +877,7 @@ button {
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .about {
   display: grid;
@@ -691,56 +898,85 @@ button {
 }
 .about dd {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .settings-section {
+    padding: 16px;
+  }
 }
 
 /* ---------- call screen ---------- */
 
+/*
+ * Full-screen, always on the dark palette (.always-dark). Three named rows —
+ * brand, caller, controls — so hiding one never shifts the others, and every
+ * edge respects the device's safe areas.
+ */
 .call-screen {
   position: fixed;
   inset: 0;
   z-index: 50;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  padding: 24px 16px calc(40px + env(safe-area-inset-bottom));
-  /* A call is always shown on the dark palette (.always-dark), in both themes. */
-  background: radial-gradient(120% 80% at 50% 0%, var(--surface-muted) 0%, var(--background) 60%);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'brand' 'peer' 'controls';
+  overflow: hidden;
+  padding: calc(16px + var(--safe-top)) calc(var(--gutter) + var(--safe-right)) calc(28px + var(--safe-bottom))
+    calc(var(--gutter) + var(--safe-left));
+  background: var(--background);
   color: var(--text);
-  animation: call-in 0.22s ease-out;
+  animation: call-in 0.2s ease-out;
 }
 @keyframes call-in {
   from {
     opacity: 0;
-    transform: scale(1.02);
   }
 }
 .call-brand {
+  grid-area: brand;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-height: 32px;
   font-size: 13px;
   font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--text-muted);
 }
+/* The self-view takes the top corner during video, so the brand steps away. */
+.call-screen.has-video .call-brand,
+.call-screen.has-self-view .call-brand {
+  visibility: hidden;
+}
 .call-peer {
+  grid-area: peer;
   align-self: center;
+  min-width: 0;
   display: grid;
   justify-items: center;
   gap: 6px;
   text-align: center;
 }
 .call-peer h1 {
+  max-width: 100%;
   margin-top: 22px;
-  font-size: 32px;
+  font-size: clamp(24px, 7vw, 32px);
   font-weight: 700;
   letter-spacing: -0.035em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 .call-number {
+  max-width: 100%;
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .call-status {
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 15px;
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -767,7 +1003,7 @@ button {
     opacity: 0.7;
   }
   to {
-    transform: scale(1.6);
+    transform: scale(1.45);
     opacity: 0;
   }
 }
@@ -780,14 +1016,19 @@ button {
 }
 
 .call-controls {
+  grid-area: controls;
   display: flex;
   justify-content: center;
-  gap: clamp(14px, 4vw, 28px);
+  align-items: flex-start;
+  gap: clamp(12px, 5vw, 28px);
+  min-width: 0;
 }
 .call-control {
   display: grid;
   justify-items: center;
   gap: 8px;
+  min-width: 0;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--text-muted);
@@ -795,17 +1036,30 @@ button {
   font-weight: 550;
 }
 .call-control-icon {
-  width: 64px;
-  height: 64px;
+  width: clamp(54px, 16vw, 64px);
+  height: clamp(54px, 16vw, 64px);
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--text) 10%, transparent);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
   color: var(--text);
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color 0.15s, color 0.15s, transform 0.12s;
+}
+.call-control-label {
+  white-space: nowrap;
 }
 .call-control:hover .call-control-icon {
-  background: color-mix(in srgb, var(--text) 16%, transparent);
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+}
+.call-control:active .call-control-icon {
+  transform: scale(0.95);
+}
+.call-control:focus-visible {
+  outline: none;
+}
+.call-control:focus-visible .call-control-icon {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 .call-control[aria-pressed='true'] .call-control-icon {
   background: var(--text);
@@ -826,6 +1080,67 @@ button {
   cursor: default;
 }
 
+/* Over video, keep the caller's name and the controls legible. */
+.call-screen.has-video .call-peer {
+  align-self: end;
+  margin-bottom: 20px;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}
+.call-screen.has-video .call-peer h1 {
+  font-size: 22px;
+  margin-top: 0;
+}
+.call-screen.has-video::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 45%;
+  background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 0.6));
+  pointer-events: none;
+}
+.call-screen.has-video .call-control:not(.call-end):not([aria-pressed='true']) .call-control-icon {
+  background: rgb(255 255 255 / 0.16);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.call-screen.has-video .call-control {
+  color: var(--text);
+}
+
+/* Short screens (phones in landscape): no brand row, smaller caller block. */
+@media (max-height: 500px) {
+  .call-screen {
+    padding-top: calc(10px + var(--safe-top));
+    padding-bottom: calc(12px + var(--safe-bottom));
+  }
+  .call-brand {
+    display: none;
+  }
+  .call-peer {
+    gap: 2px;
+  }
+  .call-peer h1 {
+    margin-top: 10px;
+    font-size: 22px;
+  }
+  /* The avatar's size is inline (from its prop), so the override needs !important. */
+  .call-avatar .avatar {
+    width: 72px !important;
+    height: 72px !important;
+    font-size: 27px !important;
+  }
+  .call-control {
+    gap: 4px;
+  }
+  .call-control-icon {
+    width: 52px;
+    height: 52px;
+  }
+  .call-screen.has-video .call-peer {
+    margin-bottom: 10px;
+  }
+}
+
 /* ---------- real calls ---------- */
 
 .call-btn:disabled,
@@ -839,6 +1154,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   margin-bottom: 18px;
   padding: 8px 8px 8px 16px;
   border-radius: var(--radius);
@@ -854,6 +1170,9 @@ button {
   gap: 12px;
   padding: 16px;
   margin-bottom: 24px;
+}
+.dial-form .field input {
+  padding-left: 42px;
 }
 .dial-actions {
   display: flex;
@@ -897,6 +1216,10 @@ button {
 
 .status-pill {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
   font-size: 12px;
   font-weight: 600;
   padding: 4px 10px;
@@ -907,6 +1230,12 @@ button {
 .status-pill.is-online {
   color: var(--accent);
 }
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
 
 .remote-video {
   position: absolute;
@@ -914,7 +1243,7 @@ button {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  background: var(--background);
+  background: #000;
 }
 .remote-video.is-hidden {
   /* Keeps playing remote audio while the avatar is shown. */
@@ -925,30 +1254,39 @@ button {
 }
 .self-view {
   position: absolute;
-  z-index: 2;
-  right: 16px;
-  top: 16px;
-  width: clamp(110px, 18vw, 220px);
-  aspect-ratio: 4 / 3;
+  z-index: 3;
+  top: calc(16px + var(--safe-top));
+  right: calc(var(--gutter) + var(--safe-right));
+  width: clamp(92px, 26vw, 180px);
+  aspect-ratio: 3 / 4;
   object-fit: cover;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
   background: var(--surface-muted);
-  transform: scaleX(-1); /* mirror, like a camera app */
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+}
+.self-view.is-mirrored {
+  transform: scaleX(-1); /* front camera, mirrored like a camera app */
+}
+/* Landscape: a wide self-view, and the whole remote picture rather than a crop. */
+@media (orientation: landscape) {
+  .self-view {
+    width: clamp(120px, 20vw, 240px);
+    aspect-ratio: 4 / 3;
+  }
+  .remote-video {
+    object-fit: contain;
+  }
+}
+@media (max-height: 500px) {
+  .self-view {
+    width: auto;
+    height: clamp(72px, 32vh, 150px);
+  }
 }
 .call-screen > :not(video) {
   position: relative;
   z-index: 1;
-}
-.call-screen.has-video .call-peer {
-  align-self: end;
-  margin-bottom: 24px;
-  text-shadow: 0 1px 12px rgb(0 0 0 / 0.6);
-}
-.call-screen.has-video .call-peer h1 {
-  font-size: 22px;
-  margin-top: 0;
 }
 .call-flag {
   color: var(--text-muted);
@@ -957,7 +1295,8 @@ button {
 /* ---------- accounts ---------- */
 
 .splash {
-  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
 }

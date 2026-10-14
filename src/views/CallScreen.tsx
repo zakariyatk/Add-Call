@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { CameraFacing } from '../calls/CallController';
 import { brand } from '../branding/brand.config';
 import { connectedSeconds, endReasonText, type CallState } from '../calls/callMachine';
 import { Icon, type IconName } from '../components/Icon';
@@ -23,6 +24,23 @@ function statusText(state: CallState, now: number): string {
     default:
       return '';
   }
+}
+
+/** True when the device has more than one camera (front and back on phones). */
+function useHasSecondCamera(active: boolean): boolean {
+  const [many, setMany] = useState(false);
+  useEffect(() => {
+    if (!active || !navigator.mediaDevices?.enumerateDevices) return;
+    let live = true;
+    void navigator.mediaDevices
+      .enumerateDevices()
+      .then((d) => live && setMany(d.filter((x) => x.kind === 'videoinput').length > 1))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [active]);
+  return many;
 }
 
 /** Binds a MediaStream to a <video>; remote audio plays through it too. */
@@ -64,7 +82,7 @@ function Control({
       <span className="call-control-icon">
         <Icon name={icon} size={variant ? 26 : 24} />
       </span>
-      <span>{label}</span>
+      <span className="call-control-label">{label}</span>
     </button>
   );
 }
@@ -79,6 +97,8 @@ export function CallScreen({
   onHangUp,
   onToggleMute,
   onToggleVideo,
+  facing,
+  onSwitchCamera,
 }: {
   state: CallState;
   now: number;
@@ -89,6 +109,8 @@ export function CallScreen({
   onHangUp: () => void;
   onToggleMute: () => void;
   onToggleVideo: () => void;
+  facing: CameraFacing;
+  onSwitchCamera: () => void;
 }) {
   // Focus Accept for an incoming call, End otherwise, so the keyboard lands on the likely action.
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -98,14 +120,16 @@ export function CallScreen({
     buttons?.[buttons.length - 1]?.focus();
   }, [incoming]);
 
+  const showSelfView = !!localStream && state.video && localStream.getVideoTracks().length > 0;
+  const canSwitchCamera = useHasSecondCamera(showSelfView);
+
   if (!state.peer) return null;
   const ended = state.status === 'ended';
   const showRemoteVideo = !!remoteStream && state.remoteVideo && state.status === 'connected';
-  const showSelfView = !!localStream && state.video && localStream.getVideoTracks().length > 0;
 
   return (
     <div
-      className={`call-screen always-dark ${showRemoteVideo ? 'has-video' : ''}`}
+      className={`call-screen always-dark ${showRemoteVideo ? 'has-video' : ''} ${showSelfView ? 'has-self-view' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={`Call with ${state.peer.name}`}
@@ -114,7 +138,7 @@ export function CallScreen({
       {remoteStream && (
         <StreamVideo stream={remoteStream} muted={false} className={showRemoteVideo ? 'remote-video' : 'remote-video is-hidden'} />
       )}
-      {showSelfView && <StreamVideo stream={localStream} muted className="self-view" />}
+      {showSelfView && <StreamVideo stream={localStream} muted className={`self-view ${facing === 'user' ? 'is-mirrored' : ''}`} />}
 
       <div className="call-brand">
         <LogoMark size={22} />
@@ -146,6 +170,7 @@ export function CallScreen({
           <>
             <Control icon={state.muted ? 'micOff' : 'mic'} label={state.muted ? 'Unmute' : 'Mute'} pressed={state.muted} onClick={onToggleMute} disabled={ended || !localStream} />
             <Control icon={state.video ? 'video' : 'videoOff'} label="Camera" pressed={state.video} onClick={onToggleVideo} disabled={ended || !localStream} />
+            {canSwitchCamera && state.video && <Control icon="cameraSwitch" label="Flip" onClick={onSwitchCamera} disabled={ended} />}
             <Control icon="phoneOff" label="End" variant="end" onClick={onHangUp} disabled={ended} />
           </>
         )}

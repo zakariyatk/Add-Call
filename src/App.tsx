@@ -6,6 +6,7 @@ import { addToHistory, loadHistory } from './calls/history';
 import type { CallRecord, Peer } from './calls/types';
 import { useCalling } from './calls/useCalling';
 import { AppShell } from './components/AppShell';
+import { Icon } from './components/Icon';
 import { LogoMark } from './components/Logo';
 import { NAV, type ViewId } from './components/nav';
 import { browserStore, storageKey } from './lib/storage';
@@ -230,7 +231,7 @@ export default function App() {
           <div className="notice" role="status">
             <span>{calling.notice}</span>
             <button type="button" className="icon-btn" onClick={controller.dismissNotice} aria-label="Dismiss">
-              ×
+              <Icon name="close" size={18} />
             </button>
           </div>
         )}
@@ -251,6 +252,8 @@ export default function App() {
           onHangUp={controller.hangUp}
           onToggleMute={controller.toggleMute}
           onToggleVideo={() => void controller.toggleVideo()}
+          facing={calling.facing}
+          onSwitchCamera={() => void controller.switchCamera()}
         />
       )}
     </>
