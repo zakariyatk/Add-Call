@@ -46,6 +46,8 @@ export interface ConversationPeer {
   email: string;
   name: string;
   avatarPath: string | null;
+  /** @username without the @ (null until they choose one). */
+  username: string | null;
 }
 
 export interface Conversation {
@@ -63,6 +65,7 @@ export interface ConversationRow {
   peer_email: string;
   peer_name: string;
   peer_avatar: string | null;
+  peer_username?: string | null;
   updated_at: string;
   unread: number;
   last_id: string | null;

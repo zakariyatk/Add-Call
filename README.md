@@ -53,6 +53,15 @@ There is no server of our own to run.
   everyone (within 2 days), and call or video call from the chat. People who
   aren't in the app get a notification (with call notifications on). Start a
   chat with + and an email, or from People and Calls.
+- **Usernames** (like Instagram): everyone picks a unique @username (3–30
+  letters, numbers, periods and underscores) after signing in, with a live
+  "available / taken" check; change it in Settings. People find, call and
+  message each other by exact @username (or email); there's no directory to
+  browse.
+- **My list**: People → find someone by @username → **Add to my list**. Your
+  list (only you can see it) shows who's online, with message and call
+  buttons; Edit removes people. Calls and messages also work with anyone not
+  in your list, and chats with them offer an Add button.
 - **Profile pictures**: Settings → Account → tap your picture to add or change
   it (cropped to a square and shrunk before upload); Remove clears it. It shows
   everywhere: chats, calls, People and the call screen.
@@ -186,6 +195,12 @@ buckets (`avatars`, public; `chat-media`, private) and their rules. Then
 redeploy `call-push` (same code file, still with JWT verification off) so
 messages can notify people who aren't in the app. The service worker ([`public/sw.js`](public/sw.js)) only
 shows notifications: it caches nothing.
+
+### 7. Usernames and my list
+
+Apply [`20261016090000_usernames_and_contacts.sql`](supabase/migrations/20261016090000_usernames_and_contacts.sql)
+(SQL Editor → paste → Run). Existing accounts are asked to choose a username
+the next time they open the app.
 
 ## Security model and limits
 

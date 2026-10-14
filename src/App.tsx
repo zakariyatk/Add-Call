@@ -23,6 +23,10 @@ import { SettingsView } from './views/SettingsView';
 import { ChatsView } from './views/ChatsView';
 import { useChat } from './chat/useChat';
 import { resetAvatars } from './profile/avatars';
+import { findPerson, loadMyProfile } from './profile/username';
+import { useContacts } from './people/contacts';
+import { isEmail } from './calls/protocol';
+import { ChooseUsernameScreen } from './views/ChooseUsernameScreen';
 
 const store = browserStore();
 const seenKey = (email: string) => storageKey(`recentsSeen.${email}`);
@@ -124,6 +128,24 @@ export default function App() {
   }, [chatController, view, chatId]);
   // Pictures are looked up per account.
   useEffect(() => resetAvatars(), [signedInId]);
+
+  // Your @username: undefined while loading, null when not chosen yet ('' if it
+  // couldn't be loaded, which never blocks the app).
+  const [myUsername, setMyUsername] = useState<string | null | undefined>(undefined);
+  const myEmail = session?.email ?? '';
+  useEffect(() => {
+    setMyUsername(undefined);
+    if (!signedInId) return;
+    let live = true;
+    loadMyProfile(signedInId, myEmail).then(
+      (p) => live && setMyUsername(p.username),
+      () => live && setMyUsername(''),
+    );
+    return () => {
+      live = false;
+    };
+  }, [signedInId, myEmail]);
+  const contacts = useContacts(signedInId);
 
   // Call notifications: the service worker rings this browser even with no tab
   // open; its Answer / Decline buttons come back here.
@@ -257,9 +279,24 @@ export default function App() {
       />
     );
 
+  const signOutFromGate = () => {
+    signingOut.current = true;
+    void authApi.signOut().catch(() => {});
+    enter(null);
+  };
+  if (myUsername === null)
+    return <ChooseUsernameScreen session={session} onDone={setMyUsername} onSignOut={signOutFromGate} />;
+
   const startCall = (peer: Peer, video?: boolean) => void controller.dial(peer, video ?? settings.startWithVideo);
-  const startChat = async (email: string) => {
+  /** Opens the chat with someone by @username or email; resolves to an error message, or null. */
+  const startChat = async (query: string) => {
     try {
+      let email = query.trim().toLowerCase();
+      if (!isEmail(email)) {
+        const person = await findPerson(query);
+        if (!person) return `No one on ${brand.name} has that username.`;
+        email = person.email;
+      }
       navigate('chats', await chatController.openWith(email));
     } catch (err) {
       return err instanceof Error ? err.message : 'Could not open this chat.';
@@ -305,15 +342,32 @@ export default function App() {
             onOpen={(id) => navigate('chats', id)}
             onBack={() => navigate('chats')}
             onStart={startChat}
+            isContact={contacts.isContact}
             onCall={startCall}
           />
         )}
         {view === 'recents' && <RecentsView recents={history} now={now} onCall={startCall} onMessage={(p) => void startChat(p.email)} />}
         {view === 'people' && (
-          <PeopleView presence={calling.presence} history={history} connection={connection} onCall={startCall} onMessage={(p) => void startChat(p.email)} />
+          <PeopleView
+            me={session}
+            presence={calling.presence}
+            contacts={contacts.contacts}
+            contactsLoaded={contacts.loaded}
+            connection={connection}
+            onCall={startCall}
+            onMessage={(p) => void startChat(p.email)}
+          />
         )}
         {view === 'settings' && (
-          <SettingsView session={session} settings={settings} onChange={setSettings} onSignOut={signOut} connection={connection} />
+          <SettingsView
+            session={session}
+            settings={settings}
+            onChange={setSettings}
+            onSignOut={signOut}
+            connection={connection}
+            username={myUsername || null}
+            onUsername={setMyUsername}
+          />
         )}
       </AppShell>
       {call.status !== 'idle' && (

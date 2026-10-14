@@ -4,6 +4,7 @@ import type { ConnectionStatus } from '../calls/CallController';
 import { disablePush, enablePush, pushState, type PushState } from '../calls/push';
 import { brand, type ThemeMode } from '../branding/brand.config';
 import { Icon } from '../components/Icon';
+import { UsernameForm } from '../components/UsernameField';
 import { Lockup } from '../components/Logo';
 import { removeAvatar, uploadAvatar, useAvatarUrl } from '../profile/avatars';
 import { Avatar, PageHeader, Switch } from '../components/ui';
@@ -21,8 +22,13 @@ export function SettingsView({
   onChange,
   onSignOut,
   connection,
+  username,
+  onUsername,
 }: {
   connection: ConnectionStatus;
+  /** Your @username (without the @). */
+  username: string | null;
+  onUsername: (u: string) => void;
   session: Session;
   settings: Settings;
   onChange: (s: Settings) => void;
@@ -40,12 +46,14 @@ export function SettingsView({
           <ProfilePicture session={session} />
           <span className="profile-text">
             <span className="profile-name">{session.name}</span>
+            {username && <span className="profile-handle">@{username}</span>}
             <span className="profile-email">{session.email}</span>
           </span>
           <button type="button" className="btn btn-secondary" onClick={onSignOut}>
             Sign out
           </button>
         </div>
+        <UsernameRow session={session} username={username} onUsername={onUsername} />
       </div>
 
       <ChangePassword hasPassword={session.hasPassword !== false} google={!!session.google} />
@@ -89,6 +97,41 @@ export function SettingsView({
         </dl>
       </div>
     </section>
+  );
+}
+
+function UsernameRow({ session, username, onUsername }: { session: Session; username: string | null; onUsername: (u: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
+  if (editing)
+    return (
+      <div className="username-edit">
+        <UsernameForm
+          me={session}
+          initial={username ?? ''}
+          current={username}
+          submitLabel="Save"
+          onSaved={(u) => {
+            onUsername(u);
+            setEditing(false);
+            setSaved(u !== username);
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </div>
+    );
+  return (
+    <div className="setting-row">
+      <span>
+        <span className="setting-label">Username</span>
+        <span className="setting-hint" role="status">
+          {saved ? `Saved. People can now find you as @${username}.` : username ? `@${username} — people find, call and message you by it.` : 'Not chosen yet.'}
+        </span>
+      </span>
+      <button type="button" className="btn btn-secondary" onClick={() => (setEditing(true), setSaved(false))}>
+        {username ? 'Change' : 'Choose'}
+      </button>
+    </div>
   );
 }
 

@@ -2061,3 +2061,132 @@ label {
     display: inline-grid;
   }
 }
+
+/* ---------- usernames and my list ---------- */
+
+.handle-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.handle-at {
+  position: absolute;
+  left: 14px;
+  color: var(--text-muted);
+  font-weight: 600;
+  pointer-events: none;
+}
+.field .handle-input input {
+  padding-left: 32px;
+}
+.handle-input.is-ok input {
+  border-color: color-mix(in srgb, #1f9d55 60%, var(--border));
+}
+.handle-input.is-bad input {
+  border-color: var(--danger);
+}
+.username-status.is-ok {
+  color: #1f9d55;
+}
+.username-status.is-bad {
+  color: var(--danger);
+}
+.username-form {
+  display: grid;
+  gap: 14px;
+}
+.username-edit {
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+}
+.profile-handle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.settings-section .profile + .setting-row {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+}
+
+.find-form .find-hint {
+  grid-column: 1 / -1;
+  margin: -2px 2px 0;
+}
+.found-person {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px;
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--surface-muted);
+}
+.found-person .list-main {
+  flex: 1 1 140px;
+}
+.found-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.found-actions .btn {
+  min-height: 44px;
+  margin-right: 4px;
+}
+.in-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f9d55;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.section-head .group-label {
+  margin-bottom: 0;
+}
+.section-action {
+  min-height: 36px;
+  padding: 0 4px;
+  font-size: 13px;
+  text-decoration: none;
+}
+.online-label {
+  margin-top: 24px;
+}
+.btn-small {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.online-text {
+  color: var(--accent);
+}
+@media (max-width: 560px) {
+  .found-actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .found-actions .btn,
+  .found-actions .in-list {
+    order: 1;
+    flex: 1 1 100%;
+    justify-content: center;
+    margin: 6px 0 0;
+  }
+}
+.found-actions .btn {
+  white-space: nowrap;
+}

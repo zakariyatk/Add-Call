@@ -5,6 +5,8 @@ import { Icon, type IconName } from '../components/Icon';
 import { LogoMark } from '../components/Logo';
 import { Avatar } from '../components/ui';
 import { formatDuration } from '../lib/format';
+import { useUsername } from '../profile/avatars';
+import { handle } from '../profile/username';
 
 function statusText(state: CallState, now: number): string {
   switch (state.status) {
@@ -98,6 +100,7 @@ export function CallScreen({
     buttons?.[buttons.length - 1]?.focus();
   }, [incoming]);
 
+  const username = useUsername(state.peer?.email);
   if (!state.peer) return null;
   const ended = state.status === 'ended';
   const showRemoteVideo = !!remoteStream && state.remoteVideo && state.status === 'connected';
@@ -128,7 +131,7 @@ export function CallScreen({
           </div>
         )}
         <h1>{state.peer.name}</h1>
-        {state.peer.name !== state.peer.email && <p className="call-number">{state.peer.email}</p>}
+        {(username || state.peer.name !== state.peer.email) && <p className="call-number">{handle(username, state.peer.email)}</p>}
         <p className="call-status" aria-live="polite">
           {statusText(state, now)}
           {state.status === 'connected' && state.remoteMuted && <span className="call-flag"> · {state.peer.name.split(' ')[0]} is muted</span>}
