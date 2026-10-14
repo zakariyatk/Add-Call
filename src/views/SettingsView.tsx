@@ -269,7 +269,7 @@ function CallNotifications() {
     };
   }, []);
 
-  const run = (fn: () => Promise<PushState | void>, next?: PushState) => async () => {
+  const run = async (fn: () => Promise<PushState | void>, next?: PushState) => {
     setBusy(true);
     setError(null);
     try {
@@ -282,34 +282,23 @@ function CallNotifications() {
   };
 
   const hint =
-    state === 'on'
-      ? `On — calls ring this device as a notification, even when ${brand.name} is closed.`
-      : state === 'denied'
-        ? `Blocked. Allow notifications for this site in your browser's settings to be told about calls.`
-        : state === 'needs-install'
-          ? `On iPhone and iPad, first add ${brand.name} to your Home Screen (Share → Add to Home Screen), then open it from there.`
-          : state === 'unsupported'
-            ? `This browser can't show call notifications. Keep ${brand.name} open to hear calls.`
-            : `Get calls as a notification, even when ${brand.name} is closed.`;
+    state === 'denied'
+      ? `Blocked. Allow notifications for this site in your browser's settings.`
+      : state === 'needs-install'
+        ? `On iPhone and iPad, first add ${brand.name} to your Home Screen (Share → Add to Home Screen), then open it from there.`
+        : state === 'unsupported'
+          ? `This browser can't show call notifications.`
+          : busy
+            ? 'Updating…'
+            : `Ring this device for calls and messages, even when ${brand.name} is closed.`;
   return (
-    <div className="setting-row">
-      <span>
-        <span className="setting-label">Call notifications</span>
-        <span className="setting-hint" role="status">
-          {error ?? hint}
-        </span>
-      </span>
-      {state === 'off' && (
-        <button type="button" className="btn btn-secondary" disabled={busy} onClick={run(enablePush)}>
-          {busy ? 'Turning on…' : 'Turn on'}
-        </button>
-      )}
-      {state === 'on' && (
-        <button type="button" className="btn btn-secondary" disabled={busy} onClick={run(() => disablePush(), 'off')}>
-          Turn off
-        </button>
-      )}
-    </div>
+    <Switch
+      label="Call notifications"
+      hint={error ?? hint}
+      checked={state === 'on'}
+      disabled={busy || (state !== 'on' && state !== 'off')}
+      onChange={(on) => void (on ? run(enablePush) : run(() => disablePush(), 'off'))}
+    />
   );
 }
 

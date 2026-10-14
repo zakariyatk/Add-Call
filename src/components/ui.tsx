@@ -43,19 +43,25 @@ export function Switch({
   onChange,
   label,
   hint,
+  disabled,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
   hint?: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="setting-row">
+    <label className={`setting-row ${disabled ? 'is-disabled' : ''}`}>
       <span>
         <span className="setting-label">{label}</span>
-        {hint && <span className="setting-hint">{hint}</span>}
+        {hint && (
+          <span className="setting-hint" role="status">
+            {hint}
+          </span>
+        )}
       </span>
-      <input type="checkbox" role="switch" className="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" role="switch" className="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
     </label>
   );
 }

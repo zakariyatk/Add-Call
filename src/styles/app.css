@@ -2396,3 +2396,11 @@ label {
     padding-top: 4px;
   }
 }
+
+.setting-row.is-disabled {
+  cursor: default;
+}
+.switch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
