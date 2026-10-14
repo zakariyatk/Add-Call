@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { AuthError, CODE_LENGTH, authApi, type Session } from '../auth/api';
 import { brand } from '../branding/brand.config';
 import { Lockup, LogoMark } from '../components/Logo';
+import { isNativeApp } from '../lib/platform';
 
 /** How long before "Send a new code" is offered. */
 const RESEND_AFTER_S = 30;
@@ -44,7 +45,8 @@ export function LoginScreen({
   const verifying = useRef(false);
 
   useEffect(() => {
-    void authApi.providers().then((p) => setGoogle(p.google));
+    // Google doesn't allow its sign-in inside an app's embedded browser.
+    void authApi.providers().then((p) => setGoogle(p.google && !isNativeApp));
   }, []);
 
   useEffect(() => {

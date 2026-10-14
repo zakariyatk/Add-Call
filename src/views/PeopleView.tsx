@@ -194,10 +194,24 @@ export function PeopleView({
       <h2 className="group-label online-label">
         Online now{others.length > 0 && ` · ${others.length}`}
       </h2>
-      {connection !== 'online' ? (
-        <EmptyState>{connection === 'connecting' ? 'Connecting…' : `Not connected to ${brand.name}. Reconnecting…`}</EmptyState>
+      {connection === 'connecting' ? (
+        <div className="list card" aria-busy="true" aria-label="Loading people online">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="list-row" aria-hidden="true">
+              <span className="skeleton skeleton-avatar" />
+              <span className="list-main">
+                <span className="skeleton skeleton-line" />
+                <span className="skeleton skeleton-line is-short" />
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : connection === 'offline' ? (
+        <EmptyState icon="wifiOff" title="You're offline">
+          Not connected to {brand.name}. Reconnecting…
+        </EmptyState>
       ) : others.length === 0 ? (
-        <EmptyState>{presence.length ? 'Everyone online is already in your list.' : 'No one else is online right now.'}</EmptyState>
+        <EmptyState icon="users">{presence.length ? 'Everyone online is already in your list.' : 'No one else is online right now.'}</EmptyState>
       ) : (
         <ul className="list card">
           {others.map((u) => (

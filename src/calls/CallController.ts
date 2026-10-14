@@ -29,7 +29,11 @@ export interface CallSnapshot {
   remoteStream: MediaStream | null;
   /** A problem to show the user (permissions, connection). */
   notice: string | null;
+  /** Which camera the local video comes from (front on phones by default). */
+  facing: CameraFacing;
 }
+
+export type CameraFacing = 'user' | 'environment';
 
 export interface CallPreferences {
   noiseSuppression: boolean;
@@ -50,6 +54,8 @@ interface PresenceMeta {
 
 /** How long the "Call ended" screen stays up. */
 const ENDED_SCREEN_MS = 1800;
+
+const camera = (facing: CameraFacing): MediaTrackConstraints => ({ width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: facing });
 
 const newCallId = () => crypto.randomUUID();
 
@@ -74,6 +80,7 @@ export class CallController {
     localStream: null,
     remoteStream: null,
     notice: null,
+    facing: 'user',
   };
   private listeners = new Set<() => void>();
   private me: CallUser | null = null;
@@ -368,7 +375,7 @@ export class CallController {
     } else {
       let track: MediaStreamTrack | undefined;
       try {
-        track = (await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } })).getVideoTracks()[0];
+        track = (await navigator.mediaDevices.getUserMedia({ video: camera(this.snapshot.facing) })).getVideoTracks()[0];
       } catch (err) {
         return this.set({ notice: mediaError(err, true) });
       }
@@ -379,6 +386,35 @@ export class CallController {
     }
     // A new MediaStream object makes React re-bind the local preview.
     this.set({ localStream: new MediaStream(localStream.getTracks()) });
+  };
+
+  /** Flips between the front and back camera (phones); keeps the call connected. */
+  switchCamera = async () => {
+    const { call, localStream, facing } = this.snapshot;
+    if (!isActive(call.status) || !call.video || !localStream) return;
+    const next: CameraFacing = facing === 'user' ? 'environment' : 'user';
+    // Many phones can't open both cameras at once, so release the current one first.
+    for (const t of localStream.getVideoTracks()) {
+      t.stop();
+      localStream.removeTrack(t);
+    }
+    let track: MediaStreamTrack | undefined;
+    let used = next;
+    try {
+      track = (await navigator.mediaDevices.getUserMedia({ video: camera(next) })).getVideoTracks()[0];
+    } catch {
+      used = facing;
+      track = await navigator.mediaDevices
+        .getUserMedia({ video: camera(facing) })
+        .then((s) => s.getVideoTracks()[0])
+        .catch(() => undefined);
+      this.set({ notice: "Couldn't switch camera." });
+    }
+    if (!isActive(this.snapshot.call.status)) return track?.stop();
+    if (track) localStream.addTrack(track);
+    await this.media?.setVideoTrack(track ?? null);
+    if (!track) this.dispatch({ type: 'setVideo', video: false });
+    this.set({ facing: used, localStream: new MediaStream(localStream.getTracks()) });
   };
 
   // ----- internals -----
@@ -394,14 +430,13 @@ export class CallController {
 
   private async acquireMedia(video: boolean): Promise<MediaStream | null> {
     const audio: MediaTrackConstraints = { echoCancellation: true, autoGainControl: true, noiseSuppression: this.prefs.noiseSuppression };
-    const camera: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' };
     if (!navigator.mediaDevices?.getUserMedia) {
       this.set({ notice: window.isSecureContext ? 'This browser does not support calling.' : 'Calling needs a secure (HTTPS) connection.' });
       return null;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio, video: video ? camera : false });
-      this.set({ localStream: stream });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio, video: video ? camera('user') : false });
+      this.set({ localStream: stream, facing: 'user' });
       return stream;
     } catch (err) {
       if (video) {

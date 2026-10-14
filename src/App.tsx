@@ -369,6 +369,8 @@ export default function App() {
           onHangUp={controller.hangUp}
           onToggleMute={controller.toggleMute}
           onToggleVideo={() => void controller.toggleVideo()}
+          facing={calling.facing}
+          onSwitchCamera={() => void controller.switchCamera()}
         />
       )}
     </>

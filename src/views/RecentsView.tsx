@@ -22,7 +22,7 @@ export function RecentsView({
 
   return (
     <section>
-      <PageHeader title="Recents">
+      <PageHeader title="Calls">
         <div className="segmented" role="group" aria-label="Filter calls">
           {(['all', 'missed'] as const).map((f) => (
             <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
@@ -33,7 +33,15 @@ export function RecentsView({
       </PageHeader>
 
       {rows.length === 0 ? (
-        <EmptyState>{filter === 'missed' ? 'No missed calls.' : 'No calls yet. Start one from People.'}</EmptyState>
+        filter === 'missed' ? (
+          <EmptyState icon="missed" title="No missed calls">
+            Calls you don't answer will show up here.
+          </EmptyState>
+        ) : (
+          <EmptyState icon="phone" title="No calls yet">
+            Start a voice or video call from Contacts.
+          </EmptyState>
+        )
       ) : (
         <ul className="list card">
           {rows.map((r) => (
@@ -54,7 +62,7 @@ export function RecentsView({
               <button type="button" className="icon-btn" aria-label={`Message ${r.peer.name}`} title="Message" onClick={() => onMessage(r.peer)}>
                 <Icon name="message" size={20} />
               </button>
-              <CallButton label={`Call ${r.peer.name}`} onClick={() => onCall(r.peer, r.video)} />
+              <CallButton label={`${r.video ? 'Video call' : 'Call'} ${r.peer.name}`} onClick={() => onCall(r.peer, r.video)} />
             </li>
           ))}
         </ul>

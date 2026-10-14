@@ -9,7 +9,6 @@ import { Avatar } from './ui';
 import { useUsername } from '../profile/avatars';
 import { handle } from '../profile/username';
 
-
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
   online: 'Online',
   connecting: 'Connecting…',
@@ -50,7 +49,7 @@ export function AppShell({
         }}
       >
         <span className="nav-icon">
-          <Icon name={item.icon} size={variant === 'tab' ? 22 : 19} />
+          <Icon name={item.icon} size={variant === 'tab' ? 22 : 20} />
           {!!badges[item.id] && (
             <span className="badge" aria-label={item.id === 'recents' ? `${badges[item.id]} missed` : `${badges[item.id]} unread`}>
               {badges[item.id]! > 99 ? '99+' : badges[item.id]}

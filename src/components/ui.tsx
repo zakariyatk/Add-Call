@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useAvatarUrl } from '../profile/avatars';
 import { initials } from '../lib/format';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 
 /** Profile picture when the person has one (looked up by email), otherwise initials. */
 export function Avatar({ name, email, size = 40 }: { name: string | null; email?: string | null; size?: number }) {
@@ -50,7 +50,7 @@ export function CallButton({
 }) {
   return (
     <button type="button" className={`call-btn call-btn-${size}`} onClick={onClick} aria-label={label} title={label} disabled={disabled}>
-      <Icon name="phone" size={size === 'lg' ? 26 : 18} />
+      <Icon name="phone" size={size === 'lg' ? 26 : 20} />
     </button>
   );
 }
@@ -92,6 +92,16 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
   );
 }
 
-export function EmptyState({ children }: { children: ReactNode }) {
-  return <p className="empty">{children}</p>;
+export function EmptyState({ children, icon, title }: { children: ReactNode; icon?: IconName; title?: string }) {
+  return (
+    <div className="empty">
+      {icon && (
+        <span className="empty-icon">
+          <Icon name={icon} size={24} />
+        </span>
+      )}
+      {title && <p className="empty-title">{title}</p>}
+      <p>{children}</p>
+    </div>
+  );
 }

@@ -2,7 +2,7 @@
   "name": "add-call",
   "private": true,
   "version": "0.1.0",
-  "description": "Add Call — a web calling app with peer-to-peer WebRTC voice and video.",
+  "description": "Add Call \u2014 a web calling app with peer-to-peer WebRTC voice and video.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,15 +12,20 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "icons": "vite-node scripts/generate-icons.ts"
+    "icons": "vite-node scripts/generate-icons.ts",
+    "android": "npm run build && cap sync android && cap open android",
+    "android:sync": "npm run build && cap sync android"
   },
   "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3",
     "@supabase/supabase-js": "^2.117.3",
     "livekit-client": "^2.22.4",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.3",
     "@eslint/js": "9.35.0",
     "@resvg/resvg-js": "2.6.2",
     "@types/node": "24.3.1",

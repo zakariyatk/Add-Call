@@ -3,7 +3,7 @@
  * Run after changing logo colours:  npm run icons
  * (The SVG favicon and the manifest are generated on the fly and need no step.)
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Resvg } from '@resvg/resvg-js';
 import { brand } from '../src/branding/brand.config';
@@ -25,4 +25,26 @@ for (const { file, size, variant } of icons) {
   const png = new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng();
   writeFileSync(resolve(out, file), png);
   console.log(`public/icons/${file}  ${size}×${size}`);
+}
+
+// Android launcher icons (android/ exists once `npx cap add android` has run).
+const res = resolve(import.meta.dirname, '../android/app/src/main/res');
+if (existsSync(res)) {
+  const tile = logoSvg(brand, { variant: 'icon' });
+  const background = /<rect[^>]*fill="([^"]+)"/.exec(tile)?.[1] ?? '#ffffff';
+  // Adaptive icons crop to the middle 72 of 108dp, so the mark sits smaller on a transparent layer.
+  const foreground = tile.replace(/<rect[^>]*\/>/, '').replace(/scale\([\d.]+\)/, 'scale(0.56)');
+  const densities = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
+  const render = (svg: string, size: number) => new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng();
+  for (const [density, scale] of Object.entries(densities)) {
+    const dir = resolve(res, `mipmap-${density}`);
+    writeFileSync(resolve(dir, 'ic_launcher.png'), render(tile, 48 * scale));
+    writeFileSync(resolve(dir, 'ic_launcher_round.png'), render(tile, 48 * scale));
+    writeFileSync(resolve(dir, 'ic_launcher_foreground.png'), render(foreground, 108 * scale));
+  }
+  writeFileSync(
+    resolve(res, 'values/ic_launcher_background.xml'),
+    `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">${background}</color>\n</resources>\n`,
+  );
+  console.log(`android launcher icons (background ${background})`);
 }
