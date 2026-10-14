@@ -1,6 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { supabase } from '../lib/supabase';
-import { squareImage } from '../chat/media';
 
 /*
  * Profile pictures and @usernames. Picture files live in the public "avatars"
@@ -95,9 +94,8 @@ export function useUsername(email: string | null | undefined): string | null {
   return name;
 }
 
-/** Crops a chosen photo to a square, uploads it and makes it your picture. */
-export async function uploadAvatar(file: File, me: { id: string; email: string }): Promise<void> {
-  const blob = await squareImage(file, 512);
+/** Uploads a cropped square picture (from the editor) and makes it your picture. */
+export async function uploadAvatar(blob: Blob, me: { id: string; email: string }): Promise<void> {
   const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg';
   const path = `${me.id}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from('avatars').upload(path, blob, { contentType: blob.type, cacheControl: '31536000', upsert: false });

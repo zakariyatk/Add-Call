@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
 import type { ConnectionStatus } from '../calls/CallController';
 import { disablePush, enablePush, pushState, type PushState } from '../calls/push';
 import { brand, type ThemeMode } from '../branding/brand.config';
 import { Icon } from '../components/Icon';
 import { UsernameForm } from '../components/UsernameField';
+import { AvatarEditor } from '../components/AvatarEditor';
 import { Lockup } from '../components/Logo';
 import { removeAvatar, uploadAvatar, useAvatarUrl } from '../profile/avatars';
 import { Avatar, PageHeader, Switch } from '../components/ui';
@@ -135,20 +136,41 @@ function UsernameRow({ session, username, onUsername }: { session: Session; user
   );
 }
 
-/** Your picture, with a camera button to change it (and Remove when you have one). */
+/**
+ * Your picture. Tapping it opens a menu like WhatsApp's (take or choose a
+ * photo, view, remove); a new photo opens the move-and-scale editor first.
+ */
 function ProfilePicture({ session }: { session: Session }) {
-  const picker = useRef<HTMLInputElement>(null);
+  const gallery = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
   const url = useAvatarUrl(session.email);
+  const [menu, setMenu] = useState(false);
+  const [viewing, setViewing] = useState(false);
+  const [editing, setEditing] = useState<Blob | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const touch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 
-  const run = async (fn: () => Promise<void>) => {
+  const pick = (input: HTMLInputElement | null) => {
+    setMenu(false);
+    input?.click();
+  };
+  const onPicked = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) return setError('Choose a photo smaller than 25 MB.');
+    setError(null);
+    setEditing(file);
+  };
+  const remove = async () => {
+    setMenu(false);
     setBusy(true);
     setError(null);
     try {
-      await fn();
+      await removeAvatar(session);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not change your picture.');
+      setError(err instanceof Error ? err.message : 'Could not remove your picture.');
     } finally {
       setBusy(false);
     }
@@ -159,9 +181,10 @@ function ProfilePicture({ session }: { session: Session }) {
       <button
         type="button"
         className="avatar-edit"
-        onClick={() => picker.current?.click()}
+        onClick={() => (url || touch ? setMenu(true) : pick(gallery.current))}
         disabled={busy}
-        aria-label={url ? 'Change profile picture' : 'Add profile picture'}
+        aria-haspopup="dialog"
+        aria-label={url ? 'Profile picture options' : 'Add profile picture'}
         title={url ? 'Change picture' : 'Add picture'}
       >
         <Avatar name={session.name} email={session.email} size={64} />
@@ -169,26 +192,66 @@ function ProfilePicture({ session }: { session: Session }) {
           {busy ? <span className="upload-spinner" /> : <Icon name="camera" size={16} />}
         </span>
       </button>
-      <input
-        ref={picker}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
-        hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (file) void run(() => uploadAvatar(file, session));
-        }}
-      />
-      {url && !busy && (
-        <button type="button" className="link-btn avatar-remove" onClick={() => void run(() => removeAvatar(session))}>
-          Remove
-        </button>
-      )}
+      <input ref={gallery} type="file" accept="image/*" hidden onChange={onPicked} />
+      <input ref={camera} type="file" accept="image/*" capture="user" hidden onChange={onPicked} />
       {error && (
         <p className="form-error avatar-error" role="alert">
           {error}
         </p>
+      )}
+
+      {menu && (
+        <div className="sheet-backdrop" onClick={() => setMenu(false)}>
+          <div className="sheet" role="dialog" aria-modal="true" aria-label="Profile picture" onClick={(e) => e.stopPropagation()}>
+            <p className="sheet-title">Profile picture</p>
+            {touch && (
+              <button type="button" className="sheet-item" onClick={() => pick(camera.current)}>
+                <Icon name="camera" size={22} /> Take photo
+              </button>
+            )}
+            <button type="button" className="sheet-item" onClick={() => pick(gallery.current)} autoFocus>
+              <Icon name="image" size={22} /> {url ? 'Choose new photo' : 'Choose photo'}
+            </button>
+            {url && (
+              <button type="button" className="sheet-item" onClick={() => (setMenu(false), setViewing(true))}>
+                <Icon name="search" size={22} /> View photo
+              </button>
+            )}
+            {url && (
+              <button type="button" className="sheet-item is-danger" onClick={() => void remove()}>
+                <Icon name="trash" size={22} /> Remove photo
+              </button>
+            )}
+            <button type="button" className="sheet-item sheet-cancel" onClick={() => setMenu(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {viewing && url && (
+        <div className="lightbox always-dark" role="dialog" aria-modal="true" aria-label="Profile picture" onClick={() => setViewing(false)}>
+          <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="icon-btn" aria-label="Close" onClick={() => setViewing(false)} autoFocus>
+              <Icon name="close" size={22} />
+            </button>
+            <button type="button" className="icon-btn" aria-label="Change picture" onClick={() => (setViewing(false), setMenu(true))}>
+              <Icon name="camera" size={22} />
+            </button>
+          </div>
+          <img src={url} alt={`${session.name}’s profile picture`} className="avatar-full" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
+
+      {editing && (
+        <AvatarEditor
+          file={editing}
+          onCancel={() => setEditing(null)}
+          onDone={async (picture) => {
+            await uploadAvatar(picture, session);
+            setEditing(null);
+          }}
+        />
       )}
     </div>
   );

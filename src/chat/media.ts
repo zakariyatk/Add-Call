@@ -18,7 +18,8 @@ async function loadImage(file: Blob): Promise<HTMLImageElement> {
   }
 }
 
-function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+/** Encodes a canvas as WebP (or JPEG where WebP isn't supported). */
+export function encodeCanvas(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   const as = (type: string) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
   return as('image/webp').then(async (b) => {
     // Older Safari can't encode WebP and quietly returns PNG; JPEG is smaller then.
@@ -41,24 +42,10 @@ export async function compressImage(file: Blob, maxSide = 1600, quality = 0.82):
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not process this photo.');
   ctx.drawImage(img, 0, 0, width, height);
-  const blob = await toBlob(canvas, quality);
+  const blob = await encodeCanvas(canvas, quality);
   // Already small and well compressed: keep the original.
   if (scale === 1 && file.size <= blob.size && /^image\/(jpeg|webp)$/.test(file.type)) return { blob: file, width, height };
   return { blob, width, height };
-}
-
-/** The centre square of a photo at size × size (profile pictures). */
-export async function squareImage(file: Blob, size = 512): Promise<Blob> {
-  const img = await loadImage(file).catch(() => {
-    throw new Error('Choose a photo (JPEG, PNG or WebP).');
-  });
-  const side = Math.min(img.naturalWidth, img.naturalHeight);
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = Math.min(size, side);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Could not process this photo.');
-  ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, canvas.width, canvas.height);
-  return toBlob(canvas, 0.85);
 }
 
 const VOICE_TYPES = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'];
