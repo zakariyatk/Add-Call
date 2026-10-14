@@ -10,10 +10,12 @@ export function RecentsView({
   recents,
   now,
   onCall,
+  onMessage,
 }: {
   recents: CallRecord[];
   now: number;
   onCall: (p: Peer, video: boolean) => void;
+  onMessage: (p: Peer) => void;
 }) {
   const [filter, setFilter] = useState<'all' | 'missed'>('all');
   const rows = recents.filter((r) => filter === 'all' || r.direction === 'missed');
@@ -36,7 +38,7 @@ export function RecentsView({
         <ul className="list card">
           {rows.map((r) => (
             <li key={r.id} className="list-row">
-              <Avatar name={r.peer.name} />
+              <Avatar name={r.peer.name} email={r.peer.email} />
               <span className="list-main">
                 <span className={`list-title ${r.direction === 'missed' ? 'is-missed' : ''}`}>{r.peer.name}</span>
                 <span className="list-sub">
@@ -49,6 +51,9 @@ export function RecentsView({
                 </span>
               </span>
               <span className="list-meta">{formatRelative(r.at, now)}</span>
+              <button type="button" className="icon-btn" aria-label={`Message ${r.peer.name}`} title="Message" onClick={() => onMessage(r.peer)}>
+                <Icon name="message" size={20} />
+              </button>
               <CallButton label={`Call ${r.peer.name}`} onClick={() => onCall(r.peer, r.video)} />
             </li>
           ))}

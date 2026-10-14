@@ -54,3 +54,29 @@ export function notifyIncomingCall(callId: string, peer: Peer, video: boolean): 
   };
   return () => n.close();
 }
+
+/** Shows a new message if this tab isn't in front (one notification per chat; newer ones replace it). */
+export function notifyMessage(conversationId: string, name: string, text: string): void {
+  if (notifyPermission() !== 'granted' || (document.visibilityState === 'visible' && document.hasFocus())) return;
+  const options: NotificationOptions = {
+    body: text.length > 160 ? `${text.slice(0, 157)}…` : text,
+    tag: `chat-${conversationId}`,
+    icon: '/icons/icon-192.png',
+    data: { type: 'message', conversationId },
+  };
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    void registerWorker().then((reg) => reg?.showNotification(name, { ...options, renotify: true } as NotificationOptions));
+    return;
+  }
+  try {
+    const n = new Notification(name, options);
+    n.onclick = () => {
+      window.focus();
+      window.location.hash = `#/chats/${conversationId}`;
+      n.close();
+    };
+  } catch {
+    /* e.g. Android Chrome without a service worker */
+  }
+}
+

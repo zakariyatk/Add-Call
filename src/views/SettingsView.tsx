@@ -1,9 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
 import type { ConnectionStatus } from '../calls/CallController';
 import { disablePush, enablePush, pushState, type PushState } from '../calls/push';
 import { brand, type ThemeMode } from '../branding/brand.config';
+import { Icon } from '../components/Icon';
 import { Lockup } from '../components/Logo';
+import { removeAvatar, uploadAvatar, useAvatarUrl } from '../profile/avatars';
 import { Avatar, PageHeader, Switch } from '../components/ui';
 import type { Settings } from '../settings';
 
@@ -35,7 +37,7 @@ export function SettingsView({
       <div className="card settings-section">
         <h2>Account</h2>
         <div className="profile setting-row-wrap">
-          <Avatar name={session.name} size={48} />
+          <ProfilePicture session={session} />
           <span className="profile-text">
             <span className="profile-name">{session.name}</span>
             <span className="profile-email">{session.email}</span>
@@ -87,6 +89,65 @@ export function SettingsView({
         </dl>
       </div>
     </section>
+  );
+}
+
+/** Your picture, with a camera button to change it (and Remove when you have one). */
+function ProfilePicture({ session }: { session: Session }) {
+  const picker = useRef<HTMLInputElement>(null);
+  const url = useAvatarUrl(session.email);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not change your picture.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="profile-picture">
+      <button
+        type="button"
+        className="avatar-edit"
+        onClick={() => picker.current?.click()}
+        disabled={busy}
+        aria-label={url ? 'Change profile picture' : 'Add profile picture'}
+        title={url ? 'Change picture' : 'Add picture'}
+      >
+        <Avatar name={session.name} email={session.email} size={64} />
+        <span className="avatar-edit-badge" aria-hidden="true">
+          {busy ? <span className="upload-spinner" /> : <Icon name="camera" size={16} />}
+        </span>
+      </button>
+      <input
+        ref={picker}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (file) void run(() => uploadAvatar(file, session));
+        }}
+      />
+      {url && !busy && (
+        <button type="button" className="link-btn avatar-remove" onClick={() => void run(() => removeAvatar(session))}>
+          Remove
+        </button>
+      )}
+      {error && (
+        <p className="form-error avatar-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

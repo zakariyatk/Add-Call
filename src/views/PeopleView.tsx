@@ -11,24 +11,27 @@ export function PeopleView({
   history,
   connection,
   onCall,
+  onMessage,
 }: {
   presence: PresenceUser[];
   history: CallRecord[];
   connection: ConnectionStatus;
   onCall: (p: Peer, video: boolean) => void;
+  onMessage: (p: Peer) => void;
 }) {
   const [address, setAddress] = useState('');
   const [error, setError] = useState<string | null>(null);
   const online = [...presence].sort((a, b) => a.name.localeCompare(b.name));
 
-  const callAddress = (video: boolean) => (e?: FormEvent) => {
+  const toAddress = (then: (p: Peer) => void) => (e?: FormEvent) => {
     e?.preventDefault();
     const email = address.trim().toLowerCase();
     if (!isEmail(email)) return setError('Enter the email address they use for ' + brand.name + '.');
     setError(null);
     const known = presence.find((p) => p.email === email) ?? history.find((h) => h.peer.email === email)?.peer;
-    onCall({ email, name: known?.name ?? email }, video);
+    then({ email, name: known?.name ?? email });
   };
+  const callAddress = (video: boolean) => toAddress((p) => onCall(p, video));
 
   return (
     <section>
@@ -36,7 +39,7 @@ export function PeopleView({
 
       <form className="card dial-form" onSubmit={callAddress(false)} noValidate>
         <label className="field">
-          <span>Call someone on {brand.name}</span>
+          <span>Call or message someone on {brand.name}</span>
           <input
             type="email"
             inputMode="email"
@@ -48,6 +51,9 @@ export function PeopleView({
           />
         </label>
         <div className="dial-actions">
+          <button type="button" className="btn btn-secondary" onClick={toAddress(onMessage)} aria-label="Message">
+            <Icon name="message" size={18} /> <span className="hide-narrow">Message</span>
+          </button>
           <button type="button" className="btn btn-secondary" onClick={callAddress(true)}>
             <Icon name="video" size={18} /> Video
           </button>
@@ -76,16 +82,19 @@ export function PeopleView({
           {online.map((u) => (
             <li key={u.email} className="list-row">
               <span className="presence-avatar">
-                <Avatar name={u.name} />
+                <Avatar name={u.name} email={u.email} />
                 <span className={`presence-dot ${u.busy ? 'is-busy' : ''}`} aria-hidden="true" />
               </span>
               <span className="list-main">
                 <span className="list-title">{u.name}</span>
                 <span className="list-sub">{u.busy ? 'On a call' : u.email}</span>
               </span>
+              <button type="button" className="icon-btn" aria-label={`Message ${u.name}`} title="Message" onClick={() => onMessage(u)}>
+                <Icon name="message" size={20} />
+              </button>
               <button
                 type="button"
-                className="icon-btn"
+                className="icon-btn hide-narrow"
                 aria-label={`Video call ${u.name}`}
                 title="Video call"
                 disabled={u.busy}

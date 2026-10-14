@@ -3,14 +3,16 @@
 //   GET                                   → { publicKey } for PushManager.subscribe
 //   POST { action: 'ring',    callId }    caller, right after start_call: "Incoming call"
 //   POST { action: 'missed',  callId }    caller, after cancelling or a timeout: "Missed call"
+//   POST { action: 'message', messageId }  sender, for someone not in the app: the message
 //   POST { action: 'decline', callId, token }
 //        the callee's service worker, from the notification's Decline button.
 //        It has no session, so it proves itself with the token that came in
 //        the push (an HMAC of the call id only this function can make).
 //
-// ring and missed check the caller's own JWT and read the call with it, so
-// row-level security decides whether they're part of it. Each call is pushed
-// at most once per kind (calls.ring_pushed_at / missed_pushed_at).
+// ring, missed and message check the requester's own JWT and read the call or
+// message with it, so row-level security decides whether they're part of it.
+// Each call is pushed at most once per kind (calls.ring_pushed_at /
+// missed_pushed_at), each message at most once (messages.pushed_at).
 //
 // Deploy with JWT verification off (the service worker has no JWT):
 //   supabase functions deploy call-push --no-verify-jwt
@@ -54,6 +56,30 @@ function sameString(a: string, b: string): boolean {
   return diff === 0;
 }
 
+interface MessageRow {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  recipient_id: string;
+  kind: 'text' | 'image' | 'file' | 'voice';
+  body: string;
+  attachment_name: string | null;
+  duration_ms: number | null;
+  created_at: string;
+  deleted_at: string | null;
+}
+
+/** What the notification says: the text, or what was sent. */
+function messagePreview(m: MessageRow): string {
+  if (m.kind === 'image') return m.body ? `Photo: ${m.body.slice(0, 120)}` : 'Photo';
+  if (m.kind === 'file') return `File: ${m.attachment_name ?? 'attachment'}`;
+  if (m.kind === 'voice') {
+    const s = Math.round((m.duration_ms ?? 0) / 1000);
+    return `Voice message (${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')})`;
+  }
+  return m.body.length > 160 ? `${m.body.slice(0, 157)}…` : m.body;
+}
+
 interface CallRow {
   id: string;
   caller_id: string;
@@ -85,10 +111,65 @@ Deno.serve(async (req) => {
     return reply(400, { error: 'Invalid request' });
   }
   const { action, callId, token } = body;
-  if (typeof callId !== 'string' || !UUID.test(callId)) return reply(400, { error: 'Invalid call' });
-
   const url = Deno.env.get('SUPABASE_URL')!;
   const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
+  webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT') ?? 'https://call.adddots.com', publicKey, privateKey);
+
+  /** Sends one payload to every browser of a person; forgets the ones that are gone. */
+  const pushTo = async (userId: string, payload: string, options: { TTL: number; urgency: 'high'; topic: string }) => {
+    const { data: subs } = await admin.from('push_subscriptions').select('endpoint, p256dh, auth').eq('user_id', userId);
+    let sent = 0;
+    await Promise.all(
+      (subs ?? []).map(async (s) => {
+        try {
+          await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, options);
+          sent++;
+        } catch (err) {
+          const status = (err as { statusCode?: number }).statusCode;
+          // The browser unsubscribed or the subscription expired: forget it.
+          if (status === 404 || status === 410) await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint);
+          else console.warn('[call-push]', status ?? '', (err as Error).message);
+        }
+      }),
+    );
+    return sent;
+  };
+  const asUser = () =>
+    createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
+      auth: { persistSession: false },
+    });
+
+  if (action === 'message') {
+    const { messageId } = body as { messageId?: unknown };
+    if (typeof messageId !== 'string' || !UUID.test(messageId)) return reply(400, { error: 'Invalid message' });
+    const user = asUser();
+    const { data: auth } = await user.auth.getUser();
+    if (!auth.user) return reply(401, { error: 'Sign in again to continue.' });
+    const { data: msg } = await user
+      .from('messages')
+      .select('id, conversation_id, sender_id, recipient_id, kind, body, attachment_name, duration_ms, created_at, deleted_at')
+      .eq('id', messageId)
+      .maybeSingle<MessageRow>();
+    if (!msg || msg.sender_id !== auth.user.id) return reply(404, { error: 'Message not found' });
+    if (msg.deleted_at || Date.now() - Date.parse(msg.created_at) > 5 * 60_000) return reply(200, { sent: 0 });
+    const { data: claimed } = await admin.from('messages').update({ pushed_at: new Date().toISOString() }).eq('id', messageId).is('pushed_at', null).select('id');
+    if (!claimed?.length) return reply(200, { sent: 0 });
+    const { data: sender } = await admin.from('profiles').select('name, email').eq('id', msg.sender_id).maybeSingle<{ name: string; email: string }>();
+    const payload = JSON.stringify({
+      type: 'message',
+      conversationId: msg.conversation_id,
+      messageId: msg.id,
+      name: sender?.name || sender?.email || 'New message',
+      email: sender?.email ?? '',
+      preview: messagePreview(msg),
+    });
+    // Messages wait up to a day for a phone that's switched off.
+    const sent = await pushTo(msg.recipient_id, payload, { TTL: 24 * 3600, urgency: 'high', topic: msg.conversation_id.replace(/-/g, '') });
+    return reply(200, { sent });
+  }
+
+  if (typeof callId !== 'string' || !UUID.test(callId)) return reply(400, { error: 'Invalid call' });
 
   if (action === 'decline') {
     if (typeof token !== 'string' || !sameString(token, await declineToken(callId, privateKey))) return reply(403, { error: 'Not allowed' });
@@ -102,13 +183,10 @@ Deno.serve(async (req) => {
   if (action !== 'ring' && action !== 'missed') return reply(400, { error: 'Invalid action' });
 
   // The caller, checked with their own session.
-  const asUser = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {
-    global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
-    auth: { persistSession: false },
-  });
-  const { data: auth } = await asUser.auth.getUser();
+  const user = asUser();
+  const { data: auth } = await user.auth.getUser();
   if (!auth.user) return reply(401, { error: 'Sign in again to continue.' });
-  const { data: call } = await asUser
+  const { data: call } = await user
     .from('calls')
     .select('id, caller_id, callee_id, caller_name, caller_email, video, status, end_reason, created_at, answered_at')
     .eq('id', callId)
@@ -131,9 +209,6 @@ Deno.serve(async (req) => {
     .select('id');
   if (!claimed?.length) return reply(200, { sent: 0 });
 
-  const { data: subs } = await admin.from('push_subscriptions').select('endpoint, p256dh, auth').eq('user_id', call.callee_id);
-  if (!subs?.length) return reply(200, { sent: 0 });
-
   const payload = JSON.stringify(
     action === 'ring'
       ? {
@@ -148,7 +223,6 @@ Deno.serve(async (req) => {
         }
       : { type: 'missed', callId, name: call.caller_name, email: call.caller_email, video: call.video },
   );
-  webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT') ?? 'https://call.adddots.com', publicKey, privateKey);
   const options = {
     TTL: action === 'ring' ? Math.max(1, Math.round((RING_WINDOW_MS - (now - Date.parse(call.created_at))) / 1000)) : 24 * 3600,
     urgency: 'high' as const,
@@ -156,19 +230,6 @@ Deno.serve(async (req) => {
     topic: callId.replace(/-/g, ''),
   };
 
-  let sent = 0;
-  await Promise.all(
-    subs.map(async (s) => {
-      try {
-        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, options);
-        sent++;
-      } catch (err) {
-        const status = (err as { statusCode?: number }).statusCode;
-        // The browser unsubscribed or the subscription expired: forget it.
-        if (status === 404 || status === 410) await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint);
-        else console.warn('[call-push]', status ?? '', (err as Error).message);
-      }
-    }),
-  );
+  const sent = await pushTo(call.callee_id, payload, options);
   return reply(200, { sent });
 });

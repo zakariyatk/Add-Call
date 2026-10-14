@@ -19,16 +19,20 @@ export function AppShell({
   onNavigate,
   session,
   onSignOut,
-  missedCount,
+  badges,
   connection,
+  layout = 'page',
   children,
 }: {
   view: ViewId;
   onNavigate: (v: ViewId) => void;
   session: Session;
   onSignOut: () => void;
-  missedCount: number;
+  /** Counts shown on navigation items (missed calls, unread chats). */
+  badges: Partial<Record<ViewId, number>>;
   connection: ConnectionStatus;
+  /** page: centred column. split: full-width, full-height (chats). focus: a chat open full screen on phones. */
+  layout?: 'page' | 'split' | 'focus';
   children: ReactNode;
 }) {
   const navItems = (variant: 'side' | 'tab') =>
@@ -45,9 +49,9 @@ export function AppShell({
       >
         <span className="nav-icon">
           <Icon name={item.icon} size={variant === 'tab' ? 22 : 19} />
-          {item.id === 'recents' && missedCount > 0 && (
-            <span className="badge" aria-label={`${missedCount} missed`}>
-              {missedCount}
+          {!!badges[item.id] && (
+            <span className="badge" aria-label={item.id === 'recents' ? `${badges[item.id]} missed` : `${badges[item.id]} unread`}>
+              {badges[item.id]! > 99 ? '99+' : badges[item.id]}
             </span>
           )}
         </span>
@@ -56,15 +60,15 @@ export function AppShell({
     ));
 
   return (
-    <div className="shell">
+    <div className={`shell layout-${layout}`}>
       <aside className="sidebar">
-        <a href="#/recents" className="sidebar-brand" aria-label={`${brand.name} home`} onClick={(e) => (e.preventDefault(), onNavigate('recents'))}>
+        <a href="#/chats" className="sidebar-brand" aria-label={`${brand.name} home`} onClick={(e) => (e.preventDefault(), onNavigate('chats'))}>
           <Lockup size={32} />
         </a>
         <nav aria-label="Main">{navItems('side')}</nav>
         <div className="sidebar-user">
           <span className="presence-avatar" title={STATUS_LABEL[connection]}>
-            <Avatar name={session.name} size={34} />
+            <Avatar name={session.name} email={session.email} size={34} />
             <span className={`presence-dot is-${connection}`} aria-hidden="true" />
           </span>
           <span className="sidebar-user-text">

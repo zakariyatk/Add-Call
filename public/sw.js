@@ -6,6 +6,9 @@
  * Incoming call: a notification with Answer / Decline that re-alerts (sound
  * and vibration) every few seconds while the call rings, like a phone.
  * Answer opens the app and picks up; Decline ends the call without opening it.
+ *
+ * Messages: one notification per chat (newer messages replace it); tapping it
+ * opens that chat.
  */
 
 const RING_MS = 30_000; // matches RING_TIMEOUT_MS in src/calls/protocol.ts
@@ -52,6 +55,18 @@ async function showMissed(call) {
   });
 }
 
+async function showMessage(msg) {
+  await self.registration.showNotification(msg.name || 'New message', {
+    body: msg.preview || 'New message',
+    tag: `chat-${msg.conversationId}`,
+    renotify: true,
+    icon: ICON,
+    badge: BADGE,
+    vibrate: [200, 100, 200],
+    data: { type: 'message', conversationId: msg.conversationId },
+  });
+}
+
 async function current(callId) {
   const [n] = await self.registration.getNotifications({ tag: tagOf(callId) });
   return n;
@@ -82,6 +97,7 @@ self.addEventListener('push', (event) => {
   } catch {
     return;
   }
+  if (msg?.type === 'message' && typeof msg.conversationId === 'string') return event.waitUntil(showMessage(msg));
   if (!msg || typeof msg.callId !== 'string') return;
   if (msg.type === 'incoming') event.waitUntil(ring(msg));
   else if (msg.type === 'missed') event.waitUntil(showMissed(msg));
@@ -107,6 +123,7 @@ async function openApp(message) {
     }
     return;
   }
+  if (message.type === 'open-chat') return void (await self.clients.openWindow(`/#/chats/${encodeURIComponent(message.conversationId)}`));
   const params = message.type === 'answer' ? `?answer=${encodeURIComponent(message.callId)}` : '';
   await self.clients.openWindow(`/${params}#/recents`);
 }
@@ -129,6 +146,7 @@ self.addEventListener('notificationclick', (event) => {
   const n = event.notification;
   const data = n.data || {};
   n.close();
+  if (data.type === 'message') return event.waitUntil(openApp({ type: 'open-chat', conversationId: data.conversationId }));
   if (data.type !== 'incoming') return event.waitUntil(openApp({ type: 'open', callId: data.callId }));
   const stale = Date.now() - data.at > RING_MS;
   if (event.action === 'decline') return event.waitUntil(stale ? Promise.resolve() : decline(data));

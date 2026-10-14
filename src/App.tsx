@@ -20,13 +20,21 @@ import { RecentsView } from './views/RecentsView';
 import { ResetPasswordScreen } from './views/ResetPasswordScreen';
 import { VerifyEmailLink, VerifyEmailPending } from './views/VerifyEmailScreen';
 import { SettingsView } from './views/SettingsView';
+import { ChatsView } from './views/ChatsView';
+import { useChat } from './chat/useChat';
+import { resetAvatars } from './profile/avatars';
 
 const store = browserStore();
 const seenKey = (email: string) => storageKey(`recentsSeen.${email}`);
 
-const viewFromHash = (): ViewId => {
-  const id = window.location.hash.replace(/^#\/?/, '');
-  return NAV.some((n) => n.id === id) ? (id as ViewId) : 'recents';
+const CHAT_ROUTE = /^chats\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+/** #/recents → recents; #/chats/<id> → that chat; anything else → the chat list. */
+const routeFromHash = (): { view: ViewId; chatId: string | null } => {
+  const path = window.location.hash.replace(/^#\/?/, '');
+  const chat = CHAT_ROUTE.exec(path);
+  if (chat) return { view: 'chats', chatId: chat[1].toLowerCase() };
+  return { view: NAV.some((n) => n.id === path) ? (path as ViewId) : 'chats', chatId: null };
 };
 
 export default function App() {
@@ -37,7 +45,8 @@ export default function App() {
   const [resetToken, setResetToken] = useState(takeResetToken);
   const [verifyToken, setVerifyToken] = useState(takeVerifyToken);
   const [settings, setSettings] = useState<Settings>(() => loadSettings(store));
-  const [view, setView] = useState<ViewId>(viewFromHash);
+  const [route, setRoute] = useState(routeFromHash);
+  const { view, chatId } = route;
   const [history, setHistory] = useState<CallRecord[]>([]);
   const [recentsSeen, setRecentsSeen] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -86,7 +95,7 @@ export default function App() {
       if (verify) return setVerifyToken(verify);
       const reset = takeResetToken();
       if (reset) return setResetToken(reset);
-      setView(viewFromHash());
+      setRoute(routeFromHash());
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -101,6 +110,20 @@ export default function App() {
   const prefs = useMemo(() => ({ noiseSuppression: settings.noiseSuppression, ringSound: settings.ringSound }), [settings]);
   const calling = useCalling(session && !needsVerification ? session : null, prefs, addRecord);
   const { call, controller, connection } = calling;
+  const signedInId = session && !needsVerification ? session.id : null;
+  const chat = useChat(session && !needsVerification ? session : null);
+  const chatController = chat.controller;
+
+  // Messages only push to people who aren't in the app right now.
+  const presence = calling.presence;
+  useEffect(() => {
+    chatController.setOnlineLookup((email) => presence.some((p) => p.email === email));
+  }, [chatController, presence]);
+  useEffect(() => {
+    chatController.setActive(view === 'chats' ? chatId : null);
+  }, [chatController, view, chatId]);
+  // Pictures are looked up per account.
+  useEffect(() => resetAvatars(), [signedInId]);
 
   // Call notifications: the service worker rings this browser even with no tab
   // open; its Answer / Decline buttons come back here.
@@ -108,9 +131,11 @@ export default function App() {
     void registerWorker();
     const launch = takeLaunchAction();
     if (launch) controller.handleNotificationAction(launch);
-    return onWorkerMessage(controller.handleNotificationAction);
+    return onWorkerMessage((m) => {
+      if (m.type === 'open-chat' && m.conversationId) navigate('chats', m.conversationId);
+      else controller.handleNotificationAction(m);
+    });
   }, [controller]);
-  const signedInId = session && !needsVerification ? session.id : null;
   useEffect(() => {
     if (signedInId) void syncPush();
   }, [signedInId]);
@@ -129,13 +154,16 @@ export default function App() {
     return () => window.clearInterval(id);
   }, [call.status]);
 
-  const navigate = (v: ViewId) => {
-    setView(v);
-    if (window.location.hash !== `#/${v}`) window.history.pushState(null, '', `#/${v}`);
-  };
+  function navigate(v: ViewId, id: string | null = null) {
+    setRoute({ view: v, chatId: id });
+    const hash = id ? `#/${v}/${id}` : `#/${v}`;
+    if (window.location.hash !== hash) window.history.pushState(null, '', hash);
+  }
 
   const missedCount = useMemo(() => history.filter((r) => r.direction === 'missed' && r.at > recentsSeen).length, [history, recentsSeen]);
-  const label = NAV.find((n) => n.id === view)?.label;
+  const openChat = chatId ? chat.conversations.find((c) => c.id === chatId) : undefined;
+  const label = openChat ? openChat.peer.name : NAV.find((n) => n.id === view)?.label;
+  const unreadChats = chat.unreadTotal;
 
   useEffect(() => {
     document.title = resetToken
@@ -148,8 +176,8 @@ export default function App() {
             ? `Incoming call · ${brand.name}`
             : isActive(call.status)
               ? `In call · ${brand.name}`
-              : `${label} · ${brand.name}`;
-  }, [resetToken, verifyToken, needsVerification, session, label, call.status]);
+              : `${unreadChats ? `(${unreadChats}) ` : ''}${label} · ${brand.name}`;
+  }, [resetToken, verifyToken, needsVerification, session, label, call.status, unreadChats]);
 
   // Pick up new releases, but never in the middle of a call.
   const callStatus = useRef(call.status);
@@ -230,6 +258,14 @@ export default function App() {
     );
 
   const startCall = (peer: Peer, video?: boolean) => void controller.dial(peer, video ?? settings.startWithVideo);
+  const startChat = async (email: string) => {
+    try {
+      navigate('chats', await chatController.openWith(email));
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Could not open this chat.';
+    }
+    return null;
+  };
   const signOut = async () => {
     // This browser stops ringing for the account it's signing out of.
     await disablePush({ keepBrowser: true }).catch(() => {});
@@ -242,7 +278,15 @@ export default function App() {
 
   return (
     <>
-      <AppShell view={view} onNavigate={navigate} session={session} onSignOut={signOut} missedCount={missedCount} connection={connection}>
+      <AppShell
+        view={view}
+        onNavigate={(v) => navigate(v)}
+        session={session}
+        onSignOut={signOut}
+        badges={{ recents: missedCount, chats: unreadChats }}
+        connection={connection}
+        layout={view !== 'chats' ? 'page' : chatId ? 'focus' : 'split'}
+      >
         {calling.notice && (
           <div className="notice" role="status">
             <span>{calling.notice}</span>
@@ -251,8 +295,23 @@ export default function App() {
             </button>
           </div>
         )}
-        {view === 'recents' && <RecentsView recents={history} now={now} onCall={startCall} />}
-        {view === 'people' && <PeopleView presence={calling.presence} history={history} connection={connection} onCall={startCall} />}
+        {view === 'chats' && (
+          <ChatsView
+            me={session}
+            chat={chat}
+            chatId={chatId}
+            now={now}
+            online={(email) => presence.some((p) => p.email === email)}
+            onOpen={(id) => navigate('chats', id)}
+            onBack={() => navigate('chats')}
+            onStart={startChat}
+            onCall={startCall}
+          />
+        )}
+        {view === 'recents' && <RecentsView recents={history} now={now} onCall={startCall} onMessage={(p) => void startChat(p.email)} />}
+        {view === 'people' && (
+          <PeopleView presence={calling.presence} history={history} connection={connection} onCall={startCall} onMessage={(p) => void startChat(p.email)} />
+        )}
         {view === 'settings' && (
           <SettingsView session={session} settings={settings} onChange={setSettings} onSignOut={signOut} connection={connection} />
         )}

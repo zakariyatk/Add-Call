@@ -1,12 +1,21 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { useAvatarUrl } from '../profile/avatars';
 import { initials } from '../lib/format';
 import { Icon } from './Icon';
 
-/** Initials avatar with a stable neutral tone per name. */
-export function Avatar({ name, size = 40 }: { name: string | null; size?: number }) {
+/** Profile picture when the person has one (looked up by email), otherwise initials. */
+export function Avatar({ name, email, size = 40 }: { name: string | null; email?: string | null; size?: number }) {
+  const src = useAvatarUrl(email);
+  const [failed, setFailed] = useState<string | null>(null);
   return (
     <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.38 }} aria-hidden="true">
-      {name ? initials(name) : <Icon name="users" size={size * 0.45} />}
+      {src && failed !== src ? (
+        <img src={src} alt="" width={size} height={size} loading="lazy" decoding="async" onError={() => setFailed(src)} />
+      ) : name ? (
+        initials(name)
+      ) : (
+        <Icon name="users" size={size * 0.45} />
+      )}
     </span>
   );
 }
