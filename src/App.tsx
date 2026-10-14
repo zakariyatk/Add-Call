@@ -60,7 +60,7 @@ export default function App() {
   // tabs, and when the app comes back to the front. Keeping the same session
   // object then keeps calls and chats connected instead of rebuilding them.
   const enter = useCallback((s: Session | null) => {
-    setSession((prev) => (sameSession(prev ?? null, s) ? prev : s));
+    setSession((prev) => (prev !== undefined && sameSession(prev, s) ? prev : s));
   }, []);
 
   // Call history and the missed-call badge belong to the account's email.

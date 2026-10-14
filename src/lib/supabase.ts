@@ -28,7 +28,8 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 export function keepRealtimeAwake(onWake: () => void = () => {}): () => void {
   const wake = () => {
     if (document.visibilityState !== 'visible') return;
-    if (!supabase.realtime.isConnected()) supabase.realtime.connect();
+    // Only while something is subscribed (signed in); otherwise there is nothing to connect.
+    if (supabase.realtime.getChannels().length && !supabase.realtime.isConnected()) supabase.realtime.connect();
     onWake();
   };
   document.addEventListener('visibilitychange', wake);
