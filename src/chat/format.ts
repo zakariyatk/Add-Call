@@ -59,6 +59,8 @@ export function previewText(m: Pick<MessageRow, 'kind' | 'body' | 'attachment_na
       return m.attachment_name ?? 'File';
     case 'voice':
       return `Voice message (${formatClock(m.duration_ms ?? 0)})`;
+    case 'sticker':
+      return 'Sticker';
     default:
       return m.body;
   }

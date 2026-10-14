@@ -10,6 +10,8 @@ import type { Conversation, Message } from '../chat/types';
 import { Icon } from '../components/Icon';
 import { PresenceAvatar, type Presence } from '../components/ui';
 import { formatRelative } from '../lib/format';
+import { browserStore } from '../lib/storage';
+import { EMOJI_GROUPS, findSticker, recentStickers, rememberSticker, STICKERS, stickerUrl } from '../chat/stickers';
 import { addContact, useContactAction } from '../people/contacts';
 import { useUsername } from '../profile/avatars';
 import { handle } from '../profile/username';
@@ -228,7 +230,8 @@ function ChatList({
 }
 
 function LastIcon({ kind }: { kind: Message['kind'] | 'deleted' }) {
-  const icon = kind === 'image' ? 'image' : kind === 'file' ? 'file' : kind === 'voice' ? 'mic' : kind === 'deleted' ? 'alert' : null;
+  const icon =
+    kind === 'image' ? 'image' : kind === 'file' ? 'file' : kind === 'voice' ? 'mic' : kind === 'sticker' ? 'smile' : kind === 'deleted' ? 'alert' : null;
   return icon ? (
     <span className="last-icon">
       <Icon name={icon} size={15} />
@@ -407,6 +410,7 @@ function ChatThread({
           for (const f of files) void controller.sendFile(conv.id, f, asPhoto);
         }}
         onVoice={(blob, ms) => ((stick.current = true), controller.sendVoice(conv.id, blob, ms))}
+        onSticker={(id) => ((stick.current = true), controller.sendSticker(conv.id, id))}
         onTyping={controller.notifyTyping}
       />
 
@@ -487,6 +491,13 @@ function MessageItem({
     content = <FileContent m={m} controller={controller} />;
   } else if (m.kind === 'voice') {
     content = <VoiceContent m={m} controller={controller} mine={mine} />;
+  } else if (m.kind === 'sticker') {
+    const sticker = findSticker(m.body);
+    content = sticker ? (
+      <img className="msg-sticker" src={stickerUrl(sticker.id)} alt={`Sticker: ${sticker.label}`} width={140} height={140} loading="lazy" decoding="async" draggable={false} />
+    ) : (
+      <span className="msg-text muted">Sticker</span>
+    );
   } else {
     content = (
       <span className="msg-text">
@@ -682,15 +693,20 @@ function Composer({
   onText,
   onFiles,
   onVoice,
+  onSticker,
   onTyping,
 }: {
   disabled: boolean;
   onText: (text: string) => void;
   onFiles: (files: File[], asPhoto: boolean) => void;
   onVoice: (blob: Blob, durationMs: number) => void;
+  onSticker: (id: string) => void;
   onTyping: () => void;
 }) {
   const [text, setText] = useState('');
+  const [panel, setPanel] = useState<null | 'stickers' | 'emoji'>(null);
+  /** Where to put the caret after inserting an emoji. */
+  const caret = useRef<number | null>(null);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
@@ -705,7 +721,30 @@ function Composer({
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+    if (caret.current !== null && document.activeElement === el) el.setSelectionRange(caret.current, caret.current);
+    caret.current = null;
   }, [text]);
+
+  const touch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+
+  /** Puts an emoji where the cursor is (or at the end). */
+  const insertEmoji = (emoji: string) => {
+    const el = input.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const next = (text.slice(0, start) + emoji + text.slice(end)).slice(0, 4000);
+    caret.current = start + emoji.length;
+    setText(next);
+    onTyping();
+    // On a computer keep typing; on a phone don't pop the keyboard over the panel.
+    if (!touch) el?.focus();
+  };
+
+  const togglePanel = () => {
+    setPanel((p) => (p ? null : 'stickers'));
+    // Phones: hide the keyboard so the panel takes its place, like WhatsApp.
+    if (touch) input.current?.blur();
+  };
 
   useEffect(() => {
     if (!recording) return;
@@ -769,46 +808,153 @@ function Composer({
 
   const hasText = text.trim().length > 0;
   return (
-    <form className="composer" onSubmit={send}>
-      {micError && (
-        <p className="composer-error" role="alert">
-          {micError}
-        </p>
+    <>
+      {panel && (
+        <StickerPanel
+          tab={panel}
+          onTab={setPanel}
+          onSticker={(id) => {
+            rememberSticker(store, id);
+            onSticker(id);
+          }}
+          onEmoji={insertEmoji}
+          onClose={() => setPanel(null)}
+          disabled={disabled}
+        />
       )}
-      <button type="button" className="icon-btn" aria-label="Attach a file" title="File" onClick={() => files.current?.click()} disabled={disabled}>
-        <Icon name="paperclip" size={22} />
-      </button>
-      <button type="button" className="icon-btn" aria-label="Send a photo" title="Photo" onClick={() => photos.current?.click()} disabled={disabled}>
-        <Icon name="image" size={22} />
-      </button>
-      <input ref={photos} type="file" accept="image/*" multiple hidden onChange={pick(true)} />
-      <input ref={files} type="file" multiple hidden onChange={pick(false)} />
-      <textarea
-        ref={input}
-        className="composer-input"
-        rows={1}
-        placeholder={disabled ? 'Connecting…' : 'Message'}
-        aria-label="Message"
-        value={text}
-        maxLength={4000}
-        onChange={(e) => {
-          setText(e.target.value);
-          if (e.target.value) onTyping();
-        }}
-        onKeyDown={(e) => {
-          // Enter sends on a keyboard; on phones Enter is a new line and the button sends.
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia('(hover: hover) and (pointer: fine)').matches) send(e);
-        }}
-      />
-      {hasText || !canRecordVoice() ? (
-        <button type="submit" className="send-btn" aria-label="Send" disabled={!hasText || disabled}>
-          <Icon name="send" size={20} />
+      <form className="composer" onSubmit={send}>
+        {micError && (
+          <p className="composer-error" role="alert">
+            {micError}
+          </p>
+        )}
+        <button type="button" className="icon-btn" aria-label="Attach a file" title="File" onClick={() => files.current?.click()} disabled={disabled}>
+          <Icon name="paperclip" size={22} />
         </button>
-      ) : (
-        <button type="button" className="send-btn" aria-label="Record a voice message" title="Voice message" onClick={() => void record()} disabled={disabled}>
-          <Icon name="mic" size={21} />
+        <button type="button" className="icon-btn" aria-label="Send a photo" title="Photo" onClick={() => photos.current?.click()} disabled={disabled}>
+          <Icon name="image" size={22} />
         </button>
-      )}
-    </form>
+        <input ref={photos} type="file" accept="image/*" multiple hidden onChange={pick(true)} />
+        <input ref={files} type="file" multiple hidden onChange={pick(false)} />
+        <span className="composer-field">
+          <button
+            type="button"
+            className={`icon-btn composer-emoji ${panel ? 'is-on' : ''}`}
+            aria-label={panel ? 'Close stickers and emoji' : 'Stickers and emoji'}
+            aria-expanded={!!panel}
+            title="Stickers and emoji"
+            onClick={togglePanel}
+            disabled={disabled}
+          >
+            <Icon name={panel && touch ? 'keyboard' : 'smile'} size={22} />
+          </button>
+          <textarea
+            ref={input}
+            className="composer-input"
+            rows={1}
+            placeholder={disabled ? 'Connecting…' : 'Message'}
+            aria-label="Message"
+            value={text}
+            maxLength={4000}
+            onFocus={() => touch && setPanel(null)}
+            onChange={(e) => {
+              setText(e.target.value);
+              if (e.target.value) onTyping();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && panel) return setPanel(null);
+              // Enter sends on a keyboard; on phones Enter is a new line and the button sends.
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia('(hover: hover) and (pointer: fine)').matches) send(e);
+            }}
+          />
+        </span>
+        {hasText || !canRecordVoice() ? (
+          <button type="submit" className="send-btn" aria-label="Send" disabled={!hasText || disabled}>
+            <Icon name="send" size={20} />
+          </button>
+        ) : (
+          <button type="button" className="send-btn" aria-label="Record a voice message" title="Voice message" onClick={() => void record()} disabled={disabled}>
+            <Icon name="mic" size={21} />
+          </button>
+        )}
+      </form>
+    </>
+  );
+}
+
+const store = browserStore();
+
+/** WhatsApp-style panel under the chat: stickers (tap to send) and emoji (tap to insert). */
+function StickerPanel({
+  tab,
+  onTab,
+  onSticker,
+  onEmoji,
+  onClose,
+  disabled,
+}: {
+  tab: 'stickers' | 'emoji';
+  onTab: (t: 'stickers' | 'emoji') => void;
+  onSticker: (id: string) => void;
+  onEmoji: (emoji: string) => void;
+  onClose: () => void;
+  disabled: boolean;
+}) {
+  const [recent, setRecent] = useState(() => recentStickers(store));
+  return (
+    <div className="sticker-panel" role="dialog" aria-label="Stickers and emoji" onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+      <div className="sticker-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === 'stickers'} onClick={() => onTab('stickers')}>
+          Stickers
+        </button>
+        <button type="button" role="tab" aria-selected={tab === 'emoji'} onClick={() => onTab('emoji')}>
+          Emoji
+        </button>
+        <button type="button" className="icon-btn sticker-close" aria-label="Close" onClick={onClose}>
+          <Icon name="close" size={20} />
+        </button>
+      </div>
+      <div className="sticker-body" role="tabpanel">
+        {tab === 'stickers' ? (
+          <>
+            {recent.length > 0 && <p className="sticker-group">Recent</p>}
+            {recent.length > 0 && (
+              <div className="sticker-grid">
+                {recent.map((s) => (
+                  <StickerButton key={`r-${s.id}`} id={s.id} label={s.label} disabled={disabled} onPick={() => (onSticker(s.id), setRecent(recentStickers(store)))} />
+                ))}
+              </div>
+            )}
+            <p className="sticker-group">All stickers</p>
+            <div className="sticker-grid">
+              {STICKERS.map((s) => (
+                <StickerButton key={s.id} id={s.id} label={s.label} disabled={disabled} onPick={() => (onSticker(s.id), setRecent(recentStickers(store)))} />
+              ))}
+            </div>
+          </>
+        ) : (
+          EMOJI_GROUPS.map((g) => (
+            <div key={g.label}>
+              <p className="sticker-group">{g.label}</p>
+              <div className="emoji-grid">
+                {g.emoji.map((e, i) => (
+                  <button key={`${e}-${i}`} type="button" className="emoji-btn" onClick={() => onEmoji(e)} aria-label={`Insert ${e}`}>
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StickerButton({ id, label, disabled, onPick }: { id: string; label: string; disabled: boolean; onPick: () => void }) {
+  return (
+    <button type="button" className="sticker-btn" onClick={onPick} disabled={disabled} aria-label={`Send sticker: ${label}`} title={label}>
+      <img src={stickerUrl(id)} alt="" width={64} height={64} loading="lazy" decoding="async" draggable={false} />
+    </button>
   );
 }

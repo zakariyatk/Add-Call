@@ -257,6 +257,10 @@ export class ChatController {
     void this.send(conversationId, { kind: 'file' }, { blob: file, name: file.name || 'file', mime: file.type || 'application/octet-stream' });
   };
 
+  sendSticker = (conversationId: string, stickerId: string) => {
+    void this.send(conversationId, { kind: 'sticker', body: stickerId });
+  };
+
   sendVoice = (conversationId: string, blob: Blob, durationMs: number) => {
     const mime = blob.type || 'audio/webm';
     void this.send(conversationId, { kind: 'voice', duration_ms: Math.round(durationMs) }, { blob, name: `voice.${voiceExtension(mime)}`, mime });

@@ -2411,3 +2411,151 @@ label {
   opacity: 0.45;
   cursor: default;
 }
+
+/* ---------- stickers and emoji ---------- */
+
+.composer-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.composer-field .composer-input {
+  padding-left: 46px;
+}
+.composer-emoji {
+  position: absolute;
+  left: 6px;
+  bottom: 0;
+  z-index: 1;
+}
+.composer .composer-emoji {
+  width: 44px;
+}
+
+.sticker-panel {
+  display: flex;
+  flex-direction: column;
+  height: min(300px, 42vh);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.sticker-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sticker-tabs [role='tab'] {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.sticker-tabs [role='tab'][aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.sticker-close {
+  margin-left: auto;
+}
+.sticker-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 10px 12px;
+}
+.sticker-group {
+  margin: 10px 4px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 4px;
+}
+.sticker-btn {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+}
+.sticker-btn img {
+  width: 100%;
+  height: 100%;
+  max-width: 72px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.sticker-btn:active {
+  background: var(--surface-muted);
+  transform: scale(0.94);
+}
+@media (hover: hover) {
+  .sticker-btn:hover,
+  .emoji-btn:hover {
+    background: var(--surface-muted);
+  }
+}
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+}
+.emoji-btn {
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font-size: 26px;
+  line-height: 1;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+.emoji-btn:active {
+  background: var(--surface-muted);
+}
+
+/* A sent sticker: just the picture, no bubble (like WhatsApp). */
+.bubble.kind-sticker {
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  display: grid;
+  justify-items: end;
+}
+.is-theirs .bubble.kind-sticker {
+  justify-items: start;
+}
+.msg-sticker {
+  display: block;
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+.bubble.kind-sticker .msg-meta {
+  float: none;
+  margin: 2px 4px 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+@media (max-width: 760px) {
+  .sticker-panel {
+    height: min(280px, 40vh);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

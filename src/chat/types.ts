@@ -3,7 +3,7 @@
  * public.messages (see the chat_and_avatars migration), watched over Realtime.
  */
 
-export type MessageKind = 'text' | 'image' | 'file' | 'voice';
+export type MessageKind = 'text' | 'image' | 'file' | 'voice' | 'sticker';
 
 /** A row of public.messages, as the database returns it. */
 export interface MessageRow {

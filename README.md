@@ -53,6 +53,11 @@ There is no server of our own to run.
   everyone (within 2 days), and call or video call from the chat. People who
   aren't in the app get a notification (with call notifications on). Start a
   chat with + and an email, or from People and Calls.
+- **Stickers and emoji**: the smiley button in a chat opens a panel (like
+  WhatsApp's) with **Stickers** (tap to send; recently used first) and
+  **Emoji** (tap to insert). Stickers show large without a bubble. Sticker art:
+  [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (3D),
+  MIT licence, shipped in `public/stickers`.
 - **Usernames** (like Instagram): everyone picks a unique @username (3–30
   letters, numbers, periods and underscores) after signing in, with a live
   "available / taken" check; change it in Settings. People find, call and
@@ -203,6 +208,12 @@ shows notifications: it caches nothing.
 Apply [`20261016090000_usernames_and_contacts.sql`](supabase/migrations/20261016090000_usernames_and_contacts.sql)
 (SQL Editor → paste → Run). Existing accounts are asked to choose a username
 the next time they open the app.
+
+### 8. Stickers
+
+Apply [`20261017090000_stickers.sql`](supabase/migrations/20261017090000_stickers.sql)
+(SQL Editor → paste → Run) and redeploy `call-push` (so notifications say
+"Sticker").
 
 ## Security model and limits
 
