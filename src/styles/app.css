@@ -2828,3 +2828,120 @@ video {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* ---------- install popup ---------- */
+
+/* Below the call screen (z-index 50), so an incoming call always shows on top. */
+.install-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: calc(16px + var(--safe-top)) calc(var(--gutter) + var(--safe-right)) calc(16px + var(--safe-bottom))
+    calc(var(--gutter) + var(--safe-left));
+  background: rgb(0 0 0 / 0.45);
+  animation: install-fade 0.2s ease-out;
+}
+.install-sheet {
+  width: 100%;
+  max-width: 420px;
+  max-height: 100%;
+  overflow-y: auto;
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.25);
+  animation: install-rise 0.22s ease-out;
+}
+.install-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.install-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.install-head h2 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.install-head .muted {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.install-head .icon-btn {
+  align-self: flex-start;
+  margin: -8px -8px 0 0;
+}
+.install-text {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.install-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+}
+.install-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.install-step-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--accent);
+}
+.install-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@keyframes install-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes install-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* Phones: a sheet anchored to the bottom edge, above the gesture bar. */
+@media (max-width: 760px) {
+  .install-backdrop {
+    place-items: end stretch;
+    padding: var(--safe-top) 0 0;
+  }
+  .install-sheet {
+    max-width: none;
+    border-radius: calc(var(--radius) + 6px) calc(var(--radius) + 6px) 0 0;
+    border-width: 1px 0 0;
+    padding: 20px calc(var(--gutter) + 4px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(var(--gutter) + 4px + var(--safe-left));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .install-backdrop,
+  .install-sheet {
+    animation: none;
+  }
+}
