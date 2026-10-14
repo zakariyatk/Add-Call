@@ -61,7 +61,7 @@ interface MessageRow {
   conversation_id: string;
   sender_id: string;
   recipient_id: string;
-  kind: 'text' | 'image' | 'file' | 'voice';
+  kind: 'text' | 'image' | 'file' | 'voice' | 'sticker';
   body: string;
   attachment_name: string | null;
   duration_ms: number | null;
@@ -73,6 +73,7 @@ interface MessageRow {
 function messagePreview(m: MessageRow): string {
   if (m.kind === 'image') return m.body ? `Photo: ${m.body.slice(0, 120)}` : 'Photo';
   if (m.kind === 'file') return `File: ${m.attachment_name ?? 'attachment'}`;
+  if (m.kind === 'sticker') return 'Sticker';
   if (m.kind === 'voice') {
     const s = Math.round((m.duration_ms ?? 0) / 1000);
     return `Voice message (${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')})`;
