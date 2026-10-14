@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { AuthError, MIN_PASSWORD, authApi, type Session } from '../auth/api';
 import type { ConnectionStatus } from '../calls/CallController';
-import { notifyPermission, requestNotifyPermission } from '../calls/notify';
+import { disablePush, enablePush, pushState, type PushState } from '../calls/push';
 import { brand, type ThemeMode } from '../branding/brand.config';
 import { Lockup } from '../components/Logo';
 import { Avatar, PageHeader, Switch } from '../components/ui';
@@ -91,26 +91,55 @@ export function SettingsView({
 }
 
 function CallNotifications() {
-  const [permission, setPermission] = useState(notifyPermission);
+  const [state, setState] = useState<PushState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void pushState().then((s) => live && setState(s));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const run = (fn: () => Promise<PushState | void>, next?: PushState) => async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setState((await fn()) || next || null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not change call notifications.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const hint =
-    permission === 'granted'
-      ? "On — you'll get a notification when someone calls while this tab is in the background."
-      : permission === 'denied'
+    state === 'on'
+      ? `On — calls ring this device as a notification, even when ${brand.name} is closed.`
+      : state === 'denied'
         ? `Blocked. Allow notifications for this site in your browser's settings to be told about calls.`
-        : permission === 'unsupported'
-          ? "This browser can't show notifications. Keep this tab open to hear calls."
-          : 'Get a notification when someone calls while this tab is in the background.';
+        : state === 'needs-install'
+          ? `On iPhone and iPad, first add ${brand.name} to your Home Screen (Share → Add to Home Screen), then open it from there.`
+          : state === 'unsupported'
+            ? `This browser can't show call notifications. Keep ${brand.name} open to hear calls.`
+            : `Get calls as a notification, even when ${brand.name} is closed.`;
   return (
     <div className="setting-row">
       <span>
         <span className="setting-label">Call notifications</span>
         <span className="setting-hint" role="status">
-          {hint}
+          {error ?? hint}
         </span>
       </span>
-      {permission === 'default' && (
-        <button type="button" className="btn btn-secondary" onClick={() => void requestNotifyPermission().then(setPermission)}>
-          Turn on
+      {state === 'off' && (
+        <button type="button" className="btn btn-secondary" disabled={busy} onClick={run(enablePush)}>
+          {busy ? 'Turning on…' : 'Turn on'}
+        </button>
+      )}
+      {state === 'on' && (
+        <button type="button" className="btn btn-secondary" disabled={busy} onClick={run(() => disablePush(), 'off')}>
+          Turn off
         </button>
       )}
     </div>

@@ -3,6 +3,7 @@ import { authApi, takeAuthError, takeResetToken, takeVerifyToken, type Session }
 import { brand } from './branding/brand.config';
 import { isActive } from './calls/callMachine';
 import { addToHistory, loadHistory } from './calls/history';
+import { disablePush, onWorkerMessage, registerWorker, syncPush, takeLaunchAction } from './calls/push';
 import type { CallRecord, Peer } from './calls/types';
 import { useCalling } from './calls/useCalling';
 import { AppShell } from './components/AppShell';
@@ -100,6 +101,19 @@ export default function App() {
   const prefs = useMemo(() => ({ noiseSuppression: settings.noiseSuppression, ringSound: settings.ringSound }), [settings]);
   const calling = useCalling(session && !needsVerification ? session : null, prefs, addRecord);
   const { call, controller, connection } = calling;
+
+  // Call notifications: the service worker rings this browser even with no tab
+  // open; its Answer / Decline buttons come back here.
+  useEffect(() => {
+    void registerWorker();
+    const launch = takeLaunchAction();
+    if (launch) controller.handleNotificationAction(launch);
+    return onWorkerMessage(controller.handleNotificationAction);
+  }, [controller]);
+  const signedInId = session && !needsVerification ? session.id : null;
+  useEffect(() => {
+    if (signedInId) void syncPush();
+  }, [signedInId]);
 
   // Opening Recents clears the missed-call badge.
   useEffect(() => {
@@ -217,6 +231,8 @@ export default function App() {
 
   const startCall = (peer: Peer, video?: boolean) => void controller.dial(peer, video ?? settings.startWithVideo);
   const signOut = async () => {
+    // This browser stops ringing for the account it's signing out of.
+    await disablePush({ keepBrowser: true }).catch(() => {});
     controller.disconnect();
     signingOut.current = true;
     await authApi.signOut().catch(() => {});
