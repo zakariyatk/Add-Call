@@ -124,7 +124,7 @@ export function CallScreen({
       <div className="call-peer">
         {!showRemoteVideo && (
           <div className={`call-avatar ${['calling', 'ringing', 'incoming'].includes(state.status) ? 'is-pulsing' : ''}`}>
-            <Avatar name={state.peer.name} size={112} />
+            <Avatar name={state.peer.name} email={state.peer.email} size={112} />
           </div>
         )}
         <h1>{state.peer.name}</h1>

@@ -25,7 +25,7 @@ export type LaunchAction = { type: 'answer'; callId: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Messages from the service worker (notification buttons) to an open tab. */
-export type WorkerMessage = { type: 'answer' | 'decline' | 'show' | 'open'; callId?: string };
+export type WorkerMessage = { type: 'answer' | 'decline' | 'show' | 'open' | 'open-chat'; callId?: string; conversationId?: string };
 
 const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isStandalone = () => window.matchMedia?.('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true;
@@ -126,7 +126,8 @@ export function onWorkerMessage(fn: (m: WorkerMessage) => void): () => void {
   if (!('serviceWorker' in navigator)) return () => {};
   const handler = (e: MessageEvent) => {
     const m = e.data as WorkerMessage | null;
-    if (m && typeof m.type === 'string' && (m.callId === undefined || UUID.test(m.callId))) fn(m);
+    if (!m || typeof m.type !== 'string') return;
+    if ((m.callId === undefined || UUID.test(m.callId)) && (m.conversationId === undefined || UUID.test(m.conversationId))) fn(m);
   };
   navigator.serviceWorker.addEventListener('message', handler);
   return () => navigator.serviceWorker.removeEventListener('message', handler);

@@ -47,6 +47,15 @@ There is no server of our own to run.
 - **Call outcomes**: declined, busy ("on another call"), offline (not in the app
   and no call notifications), no answer
   (30s ring timeout), cancelled, connection lost, answered on another device.
+- **Chats** (one-to-one, like a phone messenger): text, photos (shrunk before
+  upload), files up to 25 MB and voice notes. Sent ✓ / delivered ✓✓ / read ✓✓
+  ticks, "typing…" and "online", unread badges, delete your own message for
+  everyone (within 2 days), and call or video call from the chat. People who
+  aren't in the app get a notification (with call notifications on). Start a
+  chat with + and an email, or from People and Calls.
+- **Profile pictures**: Settings → Account → tap your picture to add or change
+  it (cropped to a square and shrunk before upload); Remove clears it. It shows
+  everywhere: chats, calls, People and the call screen.
 - **Recents**: your call history (incoming, outgoing, missed, video, duration),
   kept per account in this browser, with call-back.
 - **Settings**: theme, noise suppression, start calls with video, ring sound,
@@ -167,7 +176,15 @@ security headers.
    `supabase db push` and `supabase functions deploy call-push --no-verify-jwt`.
 
 People then turn it on per device under **Settings → Calling → Call
-notifications**. The service worker ([`public/sw.js`](public/sw.js)) only
+notifications**.
+
+### 6. Chats and profile pictures
+
+Apply [`20261015090000_chat_and_avatars.sql`](supabase/migrations/20261015090000_chat_and_avatars.sql)
+(SQL Editor → paste → Run). It creates the tables, functions, the two Storage
+buckets (`avatars`, public; `chat-media`, private) and their rules. Then
+redeploy `call-push` (same code file, still with JWT verification off) so
+messages can notify people who aren't in the app. The service worker ([`public/sw.js`](public/sw.js)) only
 shows notifications: it caches nothing.
 
 ## Security model and limits
@@ -201,6 +218,17 @@ shows notifications: it caches nothing.
 - Media is encrypted in transit (DTLS-SRTP) and routed through LiveKit's
   servers.
 
+**Chats and pictures**
+- Only the two people in a conversation can read its messages and files
+  (row-level security on the tables and on Storage); nobody can write the
+  tables directly: messages are sent, marked read and deleted only through
+  database functions that check who is asking. At most 60 messages a minute.
+- Attachments are private and opened through links that expire after an hour.
+  Profile pictures are public files with unguessable names, and others can
+  only look them up by the exact email (like calling).
+- Messages are encrypted in transit and stored in Supabase; they are not
+  end-to-end encrypted like WhatsApp.
+
 **Not included yet**
 - Changing the email address on an account.
 - Sign in with Apple, and two-factor authentication.
@@ -225,15 +253,19 @@ src/
     callMachine.ts     call lifecycle reducer (pure, tested)
     protocol.ts        shared call types
     push.ts, notify.ts call notifications (Web Push subscription, system notifications)
+  chat/
+    ChatController.ts  conversations, messages over Realtime, sending, uploads, ticks, typing
+    format.ts          chat helpers (pure, tested); media.ts photos and voice notes
+  profile/avatars.ts   profile pictures: upload, lookup by email, cache
     history.ts, ringtone.ts, useCalling.ts
   auth/api.ts          accounts, on Supabase Auth
   lib/supabase.ts      Supabase client
   branding/            brand.config.ts (edit this), logo.ts, theme.ts
-  components/, views/  UI (People, Recents, Settings, call screen, sign-in)
+  components/, views/  UI (Chats, People, Calls, Settings, call screen, sign-in)
 supabase/
   migrations/          tables, row-level security, call functions, Realtime rules
   functions/livekit-token/  Edge Function: LiveKit passes for accepted calls
-  functions/call-push/      Edge Function: rings closed browsers with Web Push
+  functions/call-push/      Edge Function: Web Push for calls and messages
   templates/           branded auth emails (generated)
 public/.htaccess       Hostinger: HTTPS, caching, security headers
 public/sw.js           service worker: shows pushed calls (no caching)
