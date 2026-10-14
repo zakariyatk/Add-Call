@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { callReducer, IDLE, isActive, toRecord, type CallAction, type CallState } from './callMachine';
 import type { MediaSession } from './media';
 import { notifyIncomingCall } from './notify';
+import { closeCallNotification, type WorkerMessage } from './push';
 import { RING_TIMEOUT_MS, type CallRow, type PresenceUser } from './protocol';
 import { Ringtone } from './ringtone';
 import type { CallRecord, Peer } from './types';
@@ -86,6 +87,12 @@ export class CallController {
   private resetTimer: number | null = null;
   private ringTimer: number | null = null;
   private prefs: CallPreferences = { noiseSuppression: true, ringSound: true };
+  /**
+   * A call to pick up as soon as it arrives (Answer tapped on a notification).
+   * Kept across reconnects, since the app may still be signing in; it simply
+   * lapses once the call could no longer be ringing.
+   */
+  private answerOnArrival: { callId: string; until: number } | null = null;
 
   constructor(private readonly onRecord: (r: CallRecord) => void) {}
 
@@ -204,8 +211,13 @@ export class CallController {
     this.dispatch({ type: 'dial', callId, peer, video, at: Date.now() });
 
     const online = this.snapshot.presence.find((p) => p.email === peer.email);
-    if (!online) return this.dispatch({ type: 'end', reason: 'offline', at: Date.now() });
-    if (online.busy) return this.dispatch({ type: 'end', reason: 'busy', at: Date.now() });
+    if (online?.busy) return this.dispatch({ type: 'end', reason: 'busy', at: Date.now() });
+    if (!online) {
+      // Not in the app right now: ring them with a push if one of their browsers allows it.
+      const { data: reachable } = await supabase.rpc('can_ring_offline', { p_email: peer.email });
+      if (!this.isCurrent(callId, 'calling')) return;
+      if (reachable !== true) return this.dispatch({ type: 'end', reason: 'offline', at: Date.now() });
+    }
 
     const stream = await this.acquireMedia(video);
     if (!this.isCurrent(callId, 'calling')) {
@@ -225,11 +237,12 @@ export class CallController {
       return this.dispatch({ type: 'end', reason: 'failed', at: Date.now() });
     }
     const row = data as CallRow;
+    this.push('ring', callId);
     this.dispatch({ type: 'ringing', callId, peer: peerOf(row, me.id) });
     this.ringback.start();
     this.ringTimer = window.setTimeout(() => {
       if (!this.isCurrent(callId, 'ringing')) return;
-      void this.endRow(callId, 'timeout');
+      void this.endRow(callId, 'timeout').then(() => this.push('missed', callId));
       this.dispatch({ type: 'end', reason: 'timeout', at: Date.now() });
     }, RING_TIMEOUT_MS);
   };
@@ -272,8 +285,26 @@ export class CallController {
     if (!isActive(call.status) || !call.callId) return;
     if (call.status === 'incoming') return this.decline();
     const reason = call.status === 'calling' || call.status === 'ringing' ? 'cancelled' : 'hangup';
-    void this.endRow(call.callId, reason);
+    const callId = call.callId;
+    void this.endRow(callId, reason).then(() => reason === 'cancelled' && this.push('missed', callId));
     this.dispatch({ type: 'end', reason, at: Date.now() });
+  };
+
+  /** Answer / Decline tapped on a call notification (relayed by the service worker, or from the launch URL). */
+  handleNotificationAction = (m: WorkerMessage) => {
+    if (!m.callId) return;
+    const { call } = this.snapshot;
+    const ringingHere = call.status === 'incoming' && call.callId === m.callId;
+    if (m.type === 'decline') {
+      if (ringingHere) this.decline();
+      else void this.endRow(m.callId, 'declined');
+    } else if (m.type === 'answer') {
+      if (ringingHere) void this.accept(call.video);
+      else if (!isActive(call.status)) {
+        this.answerOnArrival = { callId: m.callId, until: Date.now() + RING_TIMEOUT_MS }; // picked up when the row arrives
+        if (this.snapshot.connection === 'online') void this.checkRinging();
+      }
+    }
   };
 
   toggleMute = () => {
@@ -419,6 +450,10 @@ export class CallController {
         this.clearReset();
         const peer = peerOf(row, me.id);
         this.dispatch({ type: 'incoming', callId: row.id, peer, video: row.video, at: Date.now() });
+        if (this.answerOnArrival?.callId === row.id && Date.now() < this.answerOnArrival.until) {
+          this.answerOnArrival = null;
+          return void this.accept(row.video);
+        }
         if (this.prefs.ringSound) this.ringtone.start();
         this.closeNotification = notifyIncomingCall(row.id, peer, row.video);
         this.ringTimer = window.setTimeout(() => {
@@ -460,6 +495,16 @@ export class CallController {
     this.ringback.stop();
     this.closeNotification();
     this.closeNotification = () => {};
+    // A pushed notification for this call, shown by the service worker.
+    const { call } = this.snapshot;
+    if (call.callId && call.peer && call.direction === 'incoming') closeCallNotification(call.callId);
+  }
+
+  /** Rings (or tells "missed call") the other person's browsers through Web Push. Best effort. */
+  private push(action: 'ring' | 'missed', callId: string) {
+    void supabase.functions.invoke('call-push', { body: { action, callId } }).then(({ error }) => {
+      if (error) console.warn('[calls] push', action, error.message);
+    });
   }
 
   private onEnded(call: CallState) {

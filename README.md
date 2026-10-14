@@ -34,10 +34,18 @@ There is no server of our own to run.
   notifications turned on (Settings → Calling) a call also shows a system
   notification while the tab is in the background; phones vibrate. The caller
   hears a ringback tone while it rings.
+- **Rings even when Add Call is closed** (Web Push): with call notifications
+  on, calling someone who isn't in the app sends their browsers an "Incoming
+  call" notification with **Answer** and **Decline**, which re-alerts every few
+  seconds while it rings. Answer opens the app and picks up; Decline ends the
+  call without opening it. An unanswered call becomes "Missed call". Works on
+  Android and desktop browsers (desktops: while the browser runs in the
+  background) and on iPhone/iPad once Add Call is added to the Home Screen.
 - **In call**: live timer, mute, camera on/off mid-call, a mirrored self-view,
   and indicators when the other person mutes or turns their camera off. If the
   camera is unavailable the call falls back to voice.
-- **Call outcomes**: declined, busy ("on another call"), offline, no answer
+- **Call outcomes**: declined, busy ("on another call"), offline (not in the app
+  and no call notifications), no answer
   (30s ring timeout), cancelled, connection lost, answered on another device.
 - **Recents**: your call history (incoming, outgoing, missed, video, duration),
   kept per account in this browser, with call-back.
@@ -146,6 +154,22 @@ over FTPS ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). The
 uploaded [`.htaccess`](public/.htaccess) forces HTTPS and sets caching and
 security headers.
 
+### 5. Call notifications (ring when the app is closed)
+
+1. Make a key pair once: `npx web-push generate-vapid-keys`.
+2. In Supabase: **Edge Functions → Secrets**, add `VAPID_PUBLIC_KEY` and
+   `VAPID_PRIVATE_KEY` from step 1 (and optionally `VAPID_SUBJECT`, e.g.
+   `mailto:you@adddots.com`). Keep the private key secret; changing the keys
+   later means everyone turns call notifications on again.
+3. Apply [`20261014120000_call_push.sql`](supabase/migrations/20261014120000_call_push.sql)
+   and deploy the function with JWT verification **off** (the notification's
+   Decline button has no session; the function checks callers itself):
+   `supabase db push` and `supabase functions deploy call-push --no-verify-jwt`.
+
+People then turn it on per device under **Settings → Calling → Call
+notifications**. The service worker ([`public/sw.js`](public/sw.js)) only
+shows notifications: it caches nothing.
+
 ## Security model and limits
 
 **Accounts** (Supabase Auth)
@@ -168,6 +192,12 @@ security headers.
   fine for a team; add contacts or permissions for a public service.
 - LiveKit passes are issued only for accepted calls, only to their two
   participants, and only for that call's room.
+- Push subscriptions can't be read or listed by anyone but the `call-push`
+  function. It pushes a call only when asked by that call's caller, at most
+  once as "incoming" and once as "missed". The Decline button works without a
+  session through a per-call token that only the function can make, and only
+  ends a call that's still ringing. Push messages are end-to-end encrypted to
+  the browser (RFC 8291).
 - Media is encrypted in transit (DTLS-SRTP) and routed through LiveKit's
   servers.
 
@@ -194,6 +224,7 @@ src/
     media.ts           LiveKit room for one call (loaded on demand)
     callMachine.ts     call lifecycle reducer (pure, tested)
     protocol.ts        shared call types
+    push.ts, notify.ts call notifications (Web Push subscription, system notifications)
     history.ts, ringtone.ts, useCalling.ts
   auth/api.ts          accounts, on Supabase Auth
   lib/supabase.ts      Supabase client
@@ -202,8 +233,10 @@ src/
 supabase/
   migrations/          tables, row-level security, call functions, Realtime rules
   functions/livekit-token/  Edge Function: LiveKit passes for accepted calls
+  functions/call-push/      Edge Function: rings closed browsers with Web Push
   templates/           branded auth emails (generated)
 public/.htaccess       Hostinger: HTTPS, caching, security headers
+public/sw.js           service worker: shows pushed calls (no caching)
 vite.brand.ts          injects branding into index.html, serves favicon + manifest
 scripts/               generate-icons.ts, generate-email-templates.ts
 ```
