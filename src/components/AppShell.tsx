@@ -6,6 +6,8 @@ import { Icon } from './Icon';
 import { Lockup } from './Logo';
 import { NAV, type ViewId } from './nav';
 import { Avatar } from './ui';
+import { useUsername } from '../profile/avatars';
+import { handle } from '../profile/username';
 
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -59,6 +61,8 @@ export function AppShell({
       </a>
     ));
 
+  const username = useUsername(session.email);
+
   return (
     <div className={`shell layout-${layout}`}>
       <aside className="sidebar">
@@ -67,13 +71,12 @@ export function AppShell({
         </a>
         <nav aria-label="Main">{navItems('side')}</nav>
         <div className="sidebar-user">
-          <span className="presence-avatar" title={STATUS_LABEL[connection]}>
-            <Avatar name={session.name} email={session.email} size={34} />
-            <span className={`presence-dot is-${connection}`} aria-hidden="true" />
-          </span>
+          <Avatar name={session.name} email={session.email} size={34} />
           <span className="sidebar-user-text">
             <span className="sidebar-user-name">{session.name}</span>
-            <span className="sidebar-user-email">{STATUS_LABEL[connection]}</span>
+            <span className={`sidebar-user-email ${connection !== 'online' ? 'is-warning' : ''}`}>
+              {connection !== 'online' ? STATUS_LABEL[connection] : handle(username, session.email)}
+            </span>
           </span>
           <button type="button" className="icon-btn" onClick={onSignOut} aria-label="Sign out" title="Sign out">
             <Icon name="logout" size={18} />
@@ -83,7 +86,12 @@ export function AppShell({
 
       <header className="topbar">
         <Lockup size={28} />
-        <span className={`status-pill is-${connection}`}>{STATUS_LABEL[connection]}</span>
+        {/* Only shown when calls and messages can't get through. */}
+        {connection !== 'online' && (
+          <span className={`status-pill is-${connection}`} role="status">
+            {STATUS_LABEL[connection]}
+          </span>
+        )}
       </header>
 
       <main className="content" id="main">

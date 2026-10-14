@@ -20,6 +20,23 @@ export function Avatar({ name, email, size = 40 }: { name: string | null; email?
   );
 }
 
+export type Presence = 'online' | 'busy' | 'offline';
+
+/** Green when online, orange on a call, grey when offline: like other calling apps. */
+export function PresenceDot({ status }: { status: Presence }) {
+  return <span className={`presence-dot is-${status}`} aria-hidden="true" />;
+}
+
+/** A picture with someone's presence dot. */
+export function PresenceAvatar({ name, email, status, size }: { name: string; email: string; status: Presence; size?: number }) {
+  return (
+    <span className="presence-avatar" title={status === 'online' ? 'Online' : status === 'busy' ? 'On a call' : 'Offline'}>
+      <Avatar name={name} email={email} size={size} />
+      <PresenceDot status={status} />
+    </span>
+  );
+}
+
 export function CallButton({
   label,
   onClick,

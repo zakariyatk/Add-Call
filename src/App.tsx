@@ -349,7 +349,10 @@ export default function App() {
             chat={chat}
             chatId={chatId}
             now={now}
-            online={(email) => presence.some((p) => p.email === email)}
+            presenceOf={(email) => {
+              const p = presence.find((x) => x.email === email);
+              return p ? (p.busy ? 'busy' : 'online') : 'offline';
+            }}
             onOpen={(id) => navigate('chats', id)}
             onBack={() => navigate('chats')}
             onStart={startChat}

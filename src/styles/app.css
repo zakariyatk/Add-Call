@@ -942,21 +942,27 @@ label {
 }
 .presence-dot {
   position: absolute;
-  right: -1px;
-  bottom: -1px;
-  width: 12px;
-  height: 12px;
+  right: 0;
+  bottom: 0;
+  width: 13px;
+  height: 13px;
   border-radius: 999px;
   border: 2px solid var(--surface);
-  background: var(--accent);
+  background: #22c55e;
 }
-.presence-dot.is-busy,
-.presence-dot.is-connecting {
-  background: var(--text-muted);
+.presence-dot.is-busy {
+  background: #f59e0b;
 }
-.presence-dot.is-offline,
-.presence-dot.is-replaced {
-  background: var(--border);
+.presence-dot.is-offline {
+  background: #a1a1aa;
+}
+.sidebar-user-email.is-warning {
+  color: var(--danger);
+  font-weight: 600;
+}
+.status-pill.is-offline,
+.status-pill.is-connecting {
+  color: var(--danger);
 }
 
 .status-pill {
@@ -2165,7 +2171,8 @@ label {
   font-size: 13px;
 }
 .online-text {
-  color: var(--accent);
+  color: #1f9d55;
+  font-weight: 600;
 }
 @media (max-width: 560px) {
   .found-actions {

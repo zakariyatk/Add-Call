@@ -8,7 +8,7 @@ import { DELETE_WINDOW_MS, dayLabel, formatBytes, formatClock, formatTime, previ
 import { canRecordVoice, VoiceRecorder } from '../chat/media';
 import type { Conversation, Message } from '../chat/types';
 import { Icon } from '../components/Icon';
-import { Avatar } from '../components/ui';
+import { PresenceAvatar, type Presence } from '../components/ui';
 import { formatRelative } from '../lib/format';
 import { addContact, useContactAction } from '../people/contacts';
 import { useUsername } from '../profile/avatars';
@@ -21,7 +21,7 @@ export function ChatsView({
   chat,
   chatId,
   now,
-  online,
+  presenceOf,
   onOpen,
   onBack,
   onStart,
@@ -32,7 +32,8 @@ export function ChatsView({
   chat: Chat;
   chatId: string | null;
   now: number;
-  online: (email: string) => boolean;
+  /** Someone's presence (online, on a call, offline). */
+  presenceOf: (email: string) => Presence;
   onOpen: (id: string) => void;
   onBack: () => void;
   /** Opens the chat with an @username or email; resolves to an error message, or null. */
@@ -51,7 +52,7 @@ export function ChatsView({
 
   return (
     <div className={`chats ${chatId ? 'has-open-chat' : ''}`}>
-      <ChatList me={me} chat={chat} activeId={chatId} now={now} onOpen={onOpen} onStart={onStart} />
+      <ChatList me={me} chat={chat} activeId={chatId} now={now} presenceOf={presenceOf} onOpen={onOpen} onStart={onStart} />
       <section className="chat-pane" aria-label={conv ? `Chat with ${conv.peer.name}` : 'Chat'}>
         {conv ? (
           <ChatThread
@@ -59,7 +60,7 @@ export function ChatsView({
             me={me}
             conv={conv}
             chat={chat}
-            online={online(conv.peer.email)}
+            presence={presenceOf(conv.peer.email)}
             listed={isContact(conv.peer.email)}
             onBack={onBack}
             onCall={(video) => onCall({ email: conv.peer.email, name: conv.peer.name }, video)}
@@ -76,7 +77,7 @@ export function ChatsView({
             <span className="chat-placeholder-icon">
               <Icon name="message" size={28} />
             </span>
-            <p>Choose a chat, or start a new one with someone’s email.</p>
+            <p>Choose a chat, or start a new one with someone’s @username.</p>
           </div>
         )}
       </section>
@@ -91,6 +92,7 @@ function ChatList({
   chat,
   activeId,
   now,
+  presenceOf,
   onOpen,
   onStart,
 }: {
@@ -98,6 +100,7 @@ function ChatList({
   chat: Chat;
   activeId: string | null;
   now: number;
+  presenceOf: (email: string) => Presence;
   onOpen: (id: string) => void;
   onStart: (query: string) => Promise<string | null>;
 }) {
@@ -188,7 +191,7 @@ function ChatList({
                 aria-current={c.id === activeId ? 'true' : undefined}
                 onClick={(e) => (e.preventDefault(), onOpen(c.id))}
               >
-                <Avatar name={c.peer.name} email={c.peer.email} size={48} />
+                <PresenceAvatar name={c.peer.name} email={c.peer.email} status={presenceOf(c.peer.email)} size={48} />
                 <span className="list-main">
                   <span className="chat-row-top">
                     <span className="list-title">{c.peer.name}</span>
@@ -249,7 +252,7 @@ function ChatThread({
   me,
   conv,
   chat,
-  online,
+  presence,
   listed,
   onBack,
   onCall,
@@ -257,7 +260,7 @@ function ChatThread({
   me: Session;
   conv: Conversation;
   chat: Chat;
-  online: boolean;
+  presence: Presence;
   /** In my list (otherwise the header offers Add). */
   listed: boolean;
   onBack: () => void;
@@ -296,7 +299,7 @@ function ChatThread({
 
   const selectedMsg = selected ? messages?.find((m) => m.id === selected) : undefined;
   const username = useUsername(conv.peer.email) ?? conv.peer.username;
-  const status = typing ? 'typing…' : online ? 'online' : handle(username, conv.peer.email);
+  const status = typing ? 'typing…' : presence === 'online' ? 'online' : presence === 'busy' ? 'on a call' : handle(username, conv.peer.email);
   const adding = useContactAction();
 
   return (
@@ -323,10 +326,10 @@ function ChatThread({
           <button type="button" className="icon-btn thread-back" aria-label="Back to chats" onClick={onBack}>
             <Icon name="back" size={22} />
           </button>
-          <Avatar name={conv.peer.name} email={conv.peer.email} size={40} />
+          <PresenceAvatar name={conv.peer.name} email={conv.peer.email} status={presence} size={40} />
           <span className="thread-who">
             <span className="thread-title">{conv.peer.name}</span>
-            <span className={`thread-status ${typing || online ? 'is-live' : ''}`}>{status}</span>
+            <span className={`thread-status ${typing || presence === 'online' ? 'is-live' : ''}`}>{status}</span>
           </span>
           {!listed && (
             <button
