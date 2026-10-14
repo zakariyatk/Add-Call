@@ -152,7 +152,7 @@ export class ChatController {
     if (this.me !== me) return;
     if (error) return void console.warn('[chat] list', error.message);
     const conversations = ((data ?? []) as ConversationRow[]).map(toConversation);
-    for (const c of conversations) rememberAvatar(c.peer.email, c.peer.avatarPath);
+    for (const c of conversations) rememberAvatar(c.peer.email, c.peer.avatarPath, c.peer.username);
     // The open chat is being read right now.
     if (this.active && this.isVisible()) for (const c of conversations) if (c.id === this.active) c.unread = 0;
     this.set({ conversations, loaded: true });
@@ -176,7 +176,7 @@ export class ChatController {
     if (!this.snapshot.conversations.some((c) => c.id === row.id)) {
       const conv: Conversation = {
         id: row.id,
-        peer: { id: row.peer_id, email: row.peer_email, name: row.peer_name || row.peer_email, avatarPath: row.peer_avatar },
+        peer: { id: row.peer_id, email: row.peer_email, name: row.peer_name || row.peer_email, avatarPath: row.peer_avatar, username: null },
         updatedAt: Date.now(),
         unread: 0,
         last: null,

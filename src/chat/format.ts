@@ -101,7 +101,7 @@ export function mergeMessages(current: Message[], incoming: Message[]): Message[
 export function toConversation(r: ConversationRow): Conversation {
   return {
     id: r.id,
-    peer: { id: r.peer_id, email: r.peer_email, name: r.peer_name || r.peer_email, avatarPath: r.peer_avatar },
+    peer: { id: r.peer_id, email: r.peer_email, name: r.peer_name || r.peer_email, avatarPath: r.peer_avatar, username: r.peer_username ?? null },
     updatedAt: Date.parse(r.updated_at),
     unread: r.unread ?? 0,
     last:

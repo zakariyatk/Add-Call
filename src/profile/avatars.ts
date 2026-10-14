@@ -3,14 +3,17 @@ import { supabase } from '../lib/supabase';
 import { squareImage } from '../chat/media';
 
 /*
- * Profile pictures. Files live in the public "avatars" bucket under
- * <user id>/<random>.webp (see the chat_and_avatars migration); profiles keep
- * the path. Everyone's picture is looked up by email, in batches, and cached
- * here, so any <Avatar email=…> shows it without extra wiring.
+ * Profile pictures and @usernames. Picture files live in the public "avatars"
+ * bucket under <user id>/<random>.webp (see the chat_and_avatars migration);
+ * profiles keep the path. Everyone's picture and username are looked up by
+ * email, in batches, and cached here, so any <Avatar email=…> or
+ * useUsername(email) shows them without extra wiring.
  */
 
 /** email → public URL, or null for "no picture" (also cached, so it isn't asked again). */
 const urls = new Map<string, string | null>();
+/** email → @username (without the @), or null when they haven't chosen one. */
+const usernames = new Map<string, string | null>();
 const listeners = new Set<() => void>();
 const pending = new Set<string>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -21,16 +24,26 @@ export const avatarUrl = (path: string | null | undefined): string | null =>
   path ? supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl : null;
 
 /** Records what we already know (e.g. from the conversation list), without asking the server. */
-export function rememberAvatar(email: string, path: string | null | undefined): void {
+export function rememberAvatar(email: string, path: string | null | undefined, username?: string | null): void {
   const url = avatarUrl(path);
-  if (urls.get(email) === url) return;
+  const sameName = username === undefined || usernames.get(email) === username;
+  if (urls.get(email) === url && sameName) return;
   urls.set(email, url);
+  if (username !== undefined) usernames.set(email, username);
+  notify();
+}
+
+/** Records someone's @username without touching their picture. */
+export function rememberUsername(email: string, username: string | null): void {
+  if (usernames.get(email) === username) return;
+  usernames.set(email, username);
   notify();
 }
 
 /** Forgets everyone's picture (after signing in as someone else). */
 export function resetAvatars(): void {
   urls.clear();
+  usernames.clear();
   pending.clear();
   notify();
 }
@@ -46,7 +59,10 @@ async function flush() {
     for (const e of emails) urls.delete(e); // try again next time it's shown
     return;
   }
-  for (const row of (data ?? []) as { email: string; avatar_path: string | null }[]) urls.set(row.email, avatarUrl(row.avatar_path));
+  for (const row of (data ?? []) as { email: string; avatar_path: string | null; username?: string | null }[]) {
+    urls.set(row.email, avatarUrl(row.avatar_path));
+    usernames.set(row.email, row.username ?? null);
+  }
   notify();
 }
 
@@ -68,6 +84,15 @@ export function useAvatarUrl(email: string | null | undefined): string | null {
     if (email) request(email);
   }, [email]);
   return url;
+}
+
+/** Someone's @username (without the @), or null while unknown or not chosen yet. */
+export function useUsername(email: string | null | undefined): string | null {
+  const name = useSyncExternalStore(subscribe, () => (email ? (usernames.get(email) ?? null) : null));
+  useEffect(() => {
+    if (email) request(email);
+  }, [email]);
+  return name;
 }
 
 /** Crops a chosen photo to a square, uploads it and makes it your picture. */

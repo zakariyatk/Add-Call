@@ -10,6 +10,9 @@ import type { Conversation, Message } from '../chat/types';
 import { Icon } from '../components/Icon';
 import { Avatar } from '../components/ui';
 import { formatRelative } from '../lib/format';
+import { addContact, useContactAction } from '../people/contacts';
+import { useUsername } from '../profile/avatars';
+import { handle } from '../profile/username';
 
 type Chat = ChatSnapshot & { controller: ChatController };
 
@@ -23,6 +26,7 @@ export function ChatsView({
   onBack,
   onStart,
   onCall,
+  isContact,
 }: {
   me: Session;
   chat: Chat;
@@ -31,9 +35,11 @@ export function ChatsView({
   online: (email: string) => boolean;
   onOpen: (id: string) => void;
   onBack: () => void;
-  /** Opens the chat with an email; resolves to an error message, or null. */
-  onStart: (email: string) => Promise<string | null>;
+  /** Opens the chat with an @username or email; resolves to an error message, or null. */
+  onStart: (query: string) => Promise<string | null>;
   onCall: (p: Peer, video: boolean) => void;
+  /** Whether someone is in my list. */
+  isContact: (email: string) => boolean;
 }) {
   const conv = chatId ? chat.conversations.find((c) => c.id === chatId) : undefined;
 
@@ -54,6 +60,7 @@ export function ChatsView({
             conv={conv}
             chat={chat}
             online={online(conv.peer.email)}
+            listed={isContact(conv.peer.email)}
             onBack={onBack}
             onCall={(video) => onCall({ email: conv.peer.email, name: conv.peer.name }, video)}
           />
@@ -92,7 +99,7 @@ function ChatList({
   activeId: string | null;
   now: number;
   onOpen: (id: string) => void;
-  onStart: (email: string) => Promise<string | null>;
+  onStart: (query: string) => Promise<string | null>;
 }) {
   const [query, setQuery] = useState('');
   const [starting, setStarting] = useState(false);
@@ -105,8 +112,8 @@ function ChatList({
 
   const start = async (e: FormEvent) => {
     e.preventDefault();
-    const address = email.trim().toLowerCase();
-    if (!isEmail(address)) return setError(`Enter the email address they use for ${brand.name}.`);
+    const address = email.trim().toLowerCase().replace(/^@+/, '');
+    if (!isEmail(address) && !/^[a-z0-9._]{3,30}$/.test(address)) return setError(`Type their @username on ${brand.name} (or their email).`);
     setBusy(true);
     setError(null);
     const problem = await onStart(address);
@@ -137,10 +144,11 @@ function ChatList({
           <label className="field">
             <span>New chat</span>
             <input
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              placeholder="name@example.com"
+              type="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="@username or email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               aria-invalid={error ? true : undefined}
@@ -169,7 +177,7 @@ function ChatList({
       {!chat.loaded ? (
         <p className="empty">{chat.connection === 'online' ? 'Loading…' : 'Connecting…'}</p>
       ) : rows.length === 0 ? (
-        <p className="empty">{q ? 'No chats match.' : 'No chats yet. Tap + to message someone by their email.'}</p>
+        <p className="empty">{q ? 'No chats match.' : 'No chats yet. Tap + to message someone by their @username.'}</p>
       ) : (
         <ul className="list card chat-list">
           {rows.map((c) => (
@@ -242,6 +250,7 @@ function ChatThread({
   conv,
   chat,
   online,
+  listed,
   onBack,
   onCall,
 }: {
@@ -249,6 +258,8 @@ function ChatThread({
   conv: Conversation;
   chat: Chat;
   online: boolean;
+  /** In my list (otherwise the header offers Add). */
+  listed: boolean;
   onBack: () => void;
   onCall: (video: boolean) => void;
 }) {
@@ -284,7 +295,9 @@ function ChatThread({
   };
 
   const selectedMsg = selected ? messages?.find((m) => m.id === selected) : undefined;
-  const status = typing ? 'typing…' : online ? 'online' : conv.peer.email;
+  const username = useUsername(conv.peer.email) ?? conv.peer.username;
+  const status = typing ? 'typing…' : online ? 'online' : handle(username, conv.peer.email);
+  const adding = useContactAction();
 
   return (
     <div className="thread">
@@ -315,6 +328,18 @@ function ChatThread({
             <span className="thread-title">{conv.peer.name}</span>
             <span className={`thread-status ${typing || online ? 'is-live' : ''}`}>{status}</span>
           </span>
+          {!listed && (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={`Add ${conv.peer.name} to my list`}
+              title={adding.error ?? 'Add to my list'}
+              disabled={!!adding.busy}
+              onClick={() => void adding.run('add', () => addContact(username ?? conv.peer.email))}
+            >
+              <Icon name="userPlus" size={21} />
+            </button>
+          )}
           <button type="button" className="icon-btn" aria-label={`Video call ${conv.peer.name}`} title="Video call" onClick={() => onCall(true)}>
             <Icon name="video" size={22} />
           </button>
