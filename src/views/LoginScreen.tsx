@@ -122,8 +122,9 @@ export function LoginScreen({
 
   return (
     <div className="login">
-      <aside className="login-hero always-dark" aria-hidden="true">
+      <aside className="login-hero always-dark">
         <FaceCluster />
+        <PhotoCredit />
         <div className="login-hero-copy">
           <Lockup size={36} />
           <p className="login-hero-name">{HEADLINE}</p>
@@ -194,6 +195,7 @@ export function LoginScreen({
                 New here? Your account is created automatically
               </li>
             </ul>
+            <PhotoCredit className="is-phone-only" />
           </form>
         ) : (
           <form
@@ -282,6 +284,18 @@ function FaceCluster() {
   );
 }
 
+/** Credit the free license of the face photos asks for, shown wherever they appear. */
+function PhotoCredit({ className = '' }: { className?: string }) {
+  return (
+    <p className={`photo-credit ${className}`.trim()}>
+      Photos designed by{' '}
+      <a href="https://www.magnific.com" target="_blank" rel="noopener noreferrer">
+        Magnific
+      </a>
+    </p>
+  );
+}
+
 /** The logo with a few faces around it, above the sign-in form on phones. */
 function LoginArt() {
   return (
@@ -299,6 +313,7 @@ function WelcomeScreen({ onStart }: { onStart: () => void }) {
   return (
     <main className="welcome always-dark">
       <FaceCluster />
+      <PhotoCredit />
       <div className="welcome-body">
         <Lockup size={34} />
         <h1>{HEADLINE}</h1>
