@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Icon } from '../components/Icon';
-import { Avatar, CallButton, EmptyState, PageHeader } from '../components/ui';
+import { Avatar, EmptyState, PageHeader } from '../components/ui';
 import { formatDuration, formatRelative } from '../lib/format';
 import type { CallRecord, Peer } from '../calls/types';
 
@@ -21,16 +21,15 @@ export function RecentsView({
   const rows = recents.filter((r) => filter === 'all' || r.direction === 'missed');
 
   return (
-    <section>
-      <PageHeader title="Calls">
-        <div className="segmented" role="group" aria-label="Filter calls">
+    <section className="recents">
+      <PageHeader title="Calls" />
+      <div className="segmented segmented-full" role="group" aria-label="Filter calls">
           {(['all', 'missed'] as const).map((f) => (
-            <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-              {f === 'all' ? 'All' : 'Missed'}
-            </button>
-          ))}
-        </div>
-      </PageHeader>
+          <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
+            {f === 'all' ? 'All' : 'Missed'}
+          </button>
+        ))}
+      </div>
 
       {rows.length === 0 ? (
         filter === 'missed' ? (
@@ -43,7 +42,7 @@ export function RecentsView({
           </EmptyState>
         )
       ) : (
-        <ul className="list card">
+        <ul className="list people-list calls-list">
           {rows.map((r) => (
             <li key={r.id} className="list-row">
               <Avatar name={r.peer.name} email={r.peer.email} />
@@ -59,10 +58,18 @@ export function RecentsView({
                 </span>
               </span>
               <span className="list-meta">{formatRelative(r.at, now)}</span>
-              <button type="button" className="icon-btn" aria-label={`Message ${r.peer.name}`} title="Message" onClick={() => onMessage(r.peer)}>
-                <Icon name="message" size={20} />
+              <button type="button" className="icon-btn accent" aria-label={`Message ${r.peer.name}`} title="Message" onClick={() => onMessage(r.peer)}>
+                <Icon name="message" size={21} />
               </button>
-              <CallButton label={`${r.video ? 'Video call' : 'Call'} ${r.peer.name}`} onClick={() => onCall(r.peer, r.video)} />
+              <button
+                type="button"
+                className="icon-btn accent"
+                aria-label={`${r.video ? 'Video call' : 'Call'} ${r.peer.name}`}
+                title={r.video ? 'Video call' : 'Call'}
+                onClick={() => onCall(r.peer, r.video)}
+              >
+                <Icon name={r.video ? 'video' : 'phone'} size={22} />
+              </button>
             </li>
           ))}
         </ul>

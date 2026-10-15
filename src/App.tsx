@@ -33,11 +33,18 @@ const seenKey = (email: string) => storageKey(`recentsSeen.${email}`);
 
 const CHAT_ROUTE = /^chats\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
-/** #/recents → recents; #/chats/<id> → that chat; anything else → the chat list. */
-const routeFromHash = (): { view: ViewId; chatId: string | null } => {
+/** An invite link or QR code: #/add/<username>. */
+const ADD_ROUTE = /^add\/([a-z0-9._]{3,30})$/i;
+
+type Route = { view: ViewId; chatId: string | null; add?: string | null };
+
+/** #/recents → recents; #/chats/<id> → that chat; #/add/<username> → Add friend; anything else → the chat list. */
+const routeFromHash = (): Route => {
   const path = window.location.hash.replace(/^#\/?/, '');
   const chat = CHAT_ROUTE.exec(path);
   if (chat) return { view: 'chats', chatId: chat[1].toLowerCase() };
+  const add = ADD_ROUTE.exec(path);
+  if (add) return { view: 'people', chatId: null, add: add[1].toLowerCase() };
   return { view: NAV.some((n) => n.id === path) ? (path as ViewId) : 'chats', chatId: null };
 };
 
@@ -338,6 +345,9 @@ export default function App() {
         {view === 'people' && (
           <PeopleView
             me={session}
+            myUsername={myUsername || null}
+            addQuery={route.add ?? null}
+            onAddDone={() => route.add && navigate('people')}
             presence={calling.presence}
             contacts={contacts.contacts}
             contactsLoaded={contacts.loaded}

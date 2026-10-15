@@ -63,7 +63,7 @@ export function AppShell({
   const username = useUsername(session.email);
 
   return (
-    <div className={`shell layout-${layout}`}>
+    <div className={`shell layout-${layout} ${connection !== 'online' ? 'has-status' : ''}`}>
       <aside className="sidebar">
         <a href="#/chats" className="sidebar-brand" aria-label={`${brand.name} home`} onClick={(e) => (e.preventDefault(), onNavigate('chats'))}>
           <Lockup size={32} />
@@ -83,6 +83,7 @@ export function AppShell({
         </div>
       </aside>
 
+      {/* Phones: each page has its own header; this bar only appears while calls and messages can't get through. */}
       <header className="topbar">
         <Lockup size={28} />
         {/* Only shown when calls and messages can't get through. */}

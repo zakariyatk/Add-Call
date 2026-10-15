@@ -2,7 +2,7 @@
   "name": "add-call",
   "private": true,
   "version": "0.1.0",
-  "description": "Add Call \u2014 a web calling app with peer-to-peer WebRTC voice and video.",
+  "description": "Add Call — a web calling app with peer-to-peer WebRTC voice and video.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,6 +21,7 @@
     "@capacitor/core": "8.5.3",
     "@supabase/supabase-js": "^2.117.3",
     "livekit-client": "^2.22.4",
+    "qrcode-generator": "1.4.4",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },

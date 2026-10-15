@@ -61,15 +61,19 @@ export function Switch({
   label,
   hint,
   disabled,
+  icon,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
   hint?: string;
   disabled?: boolean;
+  /** Small tinted icon before the label. */
+  icon?: IconName;
 }) {
   return (
     <label className={`setting-row ${disabled ? 'is-disabled' : ''}`}>
+      {icon && <SettingIcon name={icon} />}
       <span>
         <span className="setting-label">{label}</span>
         {hint && (
@@ -103,5 +107,14 @@ export function EmptyState({ children, icon, title }: { children: ReactNode; ico
       {title && <p className="empty-title">{title}</p>}
       <p>{children}</p>
     </div>
+  );
+}
+
+/** The small tinted square in front of a settings row. */
+export function SettingIcon({ name, danger }: { name: IconName; danger?: boolean }) {
+  return (
+    <span className={`setting-icon ${danger ? 'is-danger' : ''}`} aria-hidden="true">
+      <Icon name={name} size={17} />
+    </span>
   );
 }
