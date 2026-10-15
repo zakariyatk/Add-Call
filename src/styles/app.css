@@ -315,28 +315,298 @@ video {
 }
 
 .login-hero {
-  background: var(--background);
+  background:
+    radial-gradient(circle at 30% 25%, color-mix(in srgb, #5b3df5 55%, transparent), transparent 55%),
+    radial-gradient(circle at 80% 60%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 50%),
+    linear-gradient(180deg, #17123a 0%, var(--background) 80%);
   color: var(--text);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 64px;
+  align-items: center;
+  gap: 32px;
+  padding: 48px 64px;
   position: relative;
   overflow: hidden;
 }
-.login-hero-mark {
-  margin-bottom: 36px;
+.login-hero-copy {
+  width: 100%;
+  max-width: 400px;
 }
 .login-hero-name {
-  font-size: clamp(40px, 5vw, 64px);
-  font-weight: 750;
-  letter-spacing: -0.045em;
-  line-height: 1;
+  margin-top: 20px;
+  font-size: clamp(40px, 5vw, 56px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
 }
 .login-hero-tagline {
   margin-top: 14px;
-  font-size: 18px;
+  font-size: 17px;
+  line-height: 1.5;
   color: var(--text-muted);
+}
+
+/* Faces floating around a big one (welcome screen and the side panel). */
+.face-cluster {
+  position: relative;
+  width: 340px;
+  height: 340px;
+  max-width: 100%;
+  flex: none;
+}
+.face {
+  position: absolute;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  background: #2a2640;
+}
+.face-cluster .is-main {
+  width: 110px;
+  height: 110px;
+  left: calc(50% - 55px);
+  top: calc(50% - 55px);
+  border-color: var(--accent);
+}
+.face-cluster .is-a {
+  width: 82px;
+  height: 82px;
+  left: 4%;
+  top: 6%;
+}
+.face-cluster .is-b {
+  width: 70px;
+  height: 70px;
+  right: 4%;
+  top: 2%;
+}
+.face-cluster .is-c {
+  width: 88px;
+  height: 88px;
+  right: 2%;
+  bottom: 6%;
+}
+.face-cluster .is-d {
+  width: 66px;
+  height: 66px;
+  left: 8%;
+  bottom: 10%;
+}
+.face-ring {
+  position: absolute;
+  border: 1.5px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+}
+.face-ring.is-outer {
+  inset: 5%;
+}
+.face-ring.is-inner {
+  inset: 22%;
+}
+.face-chip {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+}
+.face-chip.is-online {
+  left: 44%;
+  top: 22%;
+}
+.face-chip.is-call {
+  left: 16%;
+  top: 64%;
+}
+.face-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+}
+
+/* Phones: a full-screen welcome before the sign-in form. */
+.welcome {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 30% 22%, color-mix(in srgb, #5b3df5 55%, transparent), transparent 55%),
+    radial-gradient(circle at 80% 45%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 50%),
+    linear-gradient(180deg, #17123a 0%, var(--background) 75%);
+  padding: calc(24px + var(--safe-top)) calc(24px + var(--safe-right)) calc(32px + var(--safe-bottom)) calc(24px + var(--safe-left));
+}
+.welcome .face-cluster {
+  width: min(340px, 100%);
+  height: auto;
+  aspect-ratio: 1;
+}
+.welcome-body {
+  width: 100%;
+  max-width: 420px;
+  margin-top: auto;
+  padding-top: 24px;
+}
+.welcome-body h1 {
+  margin-top: 20px;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  max-width: 6ch;
+}
+.welcome-body p {
+  margin-top: 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.welcome-start {
+  margin-top: 26px;
+  min-height: 54px;
+  font-size: 16px;
+}
+
+/* The logo with faces around it, above the sign-in form on phones. */
+.login-art {
+  position: relative;
+  display: none;
+  width: 200px;
+  height: 160px;
+  margin: 0 auto;
+}
+.login-art .logo-mark {
+  position: absolute;
+  left: 52px;
+  top: 32px;
+}
+.login-art-glow {
+  position: absolute;
+  inset: 10px 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 40%, transparent), transparent 70%);
+}
+.login-art .face {
+  border-width: 2px;
+}
+.login-art .is-a {
+  width: 52px;
+  height: 52px;
+  left: 0;
+  top: 12px;
+}
+.login-art .is-b {
+  width: 46px;
+  height: 46px;
+  right: 0;
+  top: 2px;
+}
+.login-art .is-c {
+  width: 50px;
+  height: 50px;
+  right: 6px;
+  bottom: 0;
+}
+.login-trust {
+  justify-self: center;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.login-trust li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.login-trust svg {
+  flex: none;
+  color: var(--accent);
+}
+.login-topbar {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  font-size: 16px;
+}
+.login-topbar span {
+  flex: 1;
+  text-align: center;
+  margin-right: 44px;
+}
+.login-back {
+  border-radius: 50%;
+  background: var(--surface-muted);
+}
+
+/* One box per digit, with one invisible input on top. */
+.code-boxes {
+  position: relative;
+  display: flex;
+  gap: 9px;
+}
+.code-boxes-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  font-size: 16px; /* no zoom-on-focus in iOS Safari */
+  z-index: 1;
+}
+.code-box {
+  flex: 1;
+  min-width: 0;
+  height: 58px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.code-box.is-filled {
+  border-color: var(--accent);
+}
+.code-box.is-current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.code-box.is-current:empty::after {
+  content: '';
+  width: 2px;
+  height: 26px;
+  background: var(--accent);
+  animation: code-caret 1s steps(1) infinite;
+}
+.code-boxes.is-invalid .code-box {
+  border-color: var(--danger);
+}
+@keyframes code-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.login-resend-wait {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .login-main {
@@ -384,6 +654,20 @@ video {
   }
   .login-brand {
     display: block;
+  }
+  .login-art {
+    display: block;
+  }
+  .login-card.is-code {
+    align-self: start;
+  }
+  .login-card h1,
+  .login-card > .muted {
+    text-align: center;
+  }
+  .login-card .login-topbar ~ h1,
+  .login-card .login-topbar ~ .muted {
+    text-align: left;
   }
 }
 
@@ -1380,7 +1664,9 @@ video {
 .btn-google {
   gap: 10px;
   text-decoration: none;
-  color: var(--text);
+  background: #fff;
+  color: #1f1f1f;
+  border-color: #dadce0;
   min-height: 48px;
 }
 .divider {
@@ -1400,13 +1686,6 @@ video {
 
 /* ---------- emailed sign-in code ---------- */
 
-.field input.code-input {
-  font-size: 24px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.4em;
-  text-align: center;
-  padding-left: 0.4em; /* balances the trailing letter-spacing */
-}
 .reset-screen {
   min-height: 100%;
 }
