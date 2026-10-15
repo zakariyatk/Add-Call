@@ -564,9 +564,20 @@ video {
   position: absolute;
   inset: 0;
   width: 100%;
-  opacity: 0;
+  /* See-through rather than opacity: 0, so phones still offer Paste on a long press. */
+  color: transparent;
+  caret-color: transparent;
+  background: transparent;
+  border: 0;
+  outline: none;
   font-size: 16px; /* no zoom-on-focus in iOS Safari */
   z-index: 1;
+}
+.code-boxes-input::selection {
+  background: transparent;
+}
+.login-card .code-paste {
+  margin-top: 0;
 }
 .code-box {
   flex: 1;

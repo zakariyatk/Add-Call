@@ -34,6 +34,7 @@ const PATHS = {
   back: 'm12 19-7-7 7-7M19 12H5',
   forward: 'M5 12h14m-7-7 7 7-7 7',
   chevronLeft: 'm15 18-6-6 6-6',
+  clipboard: 'M9 4h6v3H9zM9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2',
   lock: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z',
   plus: 'M5 12h14M12 5v14',
   download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',

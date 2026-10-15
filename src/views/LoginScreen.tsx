@@ -327,40 +327,76 @@ function WelcomeScreen({ onStart }: { onStart: () => void }) {
 }
 
 /**
- * One box per digit. A single invisible input sits on top, so typing, pasting
- * and the phone's "From Mail" code suggestion all work as with a plain field.
+ * One box per digit. A single see-through input sits on top, so typing,
+ * long-press → Paste and the phone's "From Mail" code suggestion all work as
+ * with a plain field. Pasted text is cleaned up, so "Your code is 050 538"
+ * still fills all six boxes, and a Paste code button reads the clipboard.
  */
 function CodeBoxes({ value, onChange, disabled, invalid }: { value: string; onChange: (v: string) => void; disabled: boolean; invalid: boolean }) {
   const [focused, setFocused] = useState(true);
+  const [pasteHint, setPasteHint] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const canReadClipboard = typeof navigator !== 'undefined' && !!navigator.clipboard?.readText;
+
+  const pasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (/\d/.test(text)) {
+        setPasteHint(false);
+        return onChange(text);
+      }
+    } catch {
+      // Permission refused or not allowed here: fall back to the paste menu.
+    }
+    setPasteHint(true);
+    input.current?.focus();
+  };
+
   return (
-    <div className={`code-boxes${invalid ? ' is-invalid' : ''}`}>
-      <input
-        className="code-boxes-input"
-        type="text"
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        pattern="[0-9]*"
-        maxLength={CODE_LENGTH}
-        autoFocus
-        required
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        disabled={disabled}
-        aria-label={`${CODE_LENGTH}-digit code`}
-        aria-invalid={invalid || undefined}
-        aria-describedby={invalid ? 'login-error' : undefined}
-      />
-      {Array.from({ length: CODE_LENGTH }, (_, i) => (
-        <span
-          key={i}
-          aria-hidden="true"
-          className={`code-box${i < value.length ? ' is-filled' : ''}${focused && !disabled && i === Math.min(value.length, CODE_LENGTH - 1) ? ' is-current' : ''}`}
-        >
-          {value[i] ?? ''}
-        </span>
-      ))}
-    </div>
+    <>
+      <div className={`code-boxes${invalid ? ' is-invalid' : ''}`}>
+        <input
+          ref={input}
+          className="code-boxes-input"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          autoFocus
+          required
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onPaste={(e) => {
+            // No maxLength: it would cut a pasted " 050 538" down before we can tidy it.
+            e.preventDefault();
+            onChange(e.clipboardData.getData('text'));
+          }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          disabled={disabled}
+          aria-label={`${CODE_LENGTH}-digit code`}
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? 'login-error' : undefined}
+        />
+        {Array.from({ length: CODE_LENGTH }, (_, i) => (
+          <span
+            key={i}
+            aria-hidden="true"
+            className={`code-box${i < value.length ? ' is-filled' : ''}${focused && !disabled && i === Math.min(value.length, CODE_LENGTH - 1) ? ' is-current' : ''}`}
+          >
+            {value[i] ?? ''}
+          </span>
+        ))}
+      </div>
+      {canReadClipboard && !disabled && value.length < CODE_LENGTH && (
+        <button type="button" className="btn btn-secondary btn-block code-paste" onClick={() => void pasteFromClipboard()}>
+          <Icon name="clipboard" size={18} /> Paste code
+        </button>
+      )}
+      {pasteHint && (
+        <p className="login-switch muted" role="status">
+          Copy the {CODE_LENGTH}-digit code from the email first, or press and hold the boxes and tap Paste.
+        </p>
+      )}
+    </>
   );
 }
