@@ -34,6 +34,16 @@ const PATHS = {
   back: 'm12 19-7-7 7-7M19 12H5',
   forward: 'M5 12h14m-7-7 7 7-7 7',
   chevronLeft: 'm15 18-6-6 6-6',
+  chevronRight: 'm9 18 6-6-6-6',
+  more: 'M12 5h.01M12 12h.01M12 19h.01',
+  moreH: 'M5 12h.01M12 12h.01M19 12h.01',
+  qr: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3',
+  at: 'M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm0 0v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1',
+  moon: 'M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z',
+  bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',
+  info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 16v-4M12 8h.01',
+  waves: 'M2 12h2M6 8v8M10 5v14M14 8v8M18 10v4M22 12h0',
+  link: 'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7',
   clipboard: 'M9 4h6v3H9zM9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2',
   lock: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z',
   plus: 'M5 12h14M12 5v14',
@@ -65,7 +75,8 @@ export function Icon({ name, size = 20, strokeWidth = 1.8 }: { name: IconName; s
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={strokeWidth}
+      // The dots of the menu icons need a heavier stroke to read as dots.
+      strokeWidth={name === 'more' || name === 'moreH' ? 3 : strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

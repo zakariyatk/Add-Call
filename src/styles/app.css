@@ -3257,3 +3257,606 @@ video {
     animation: none;
   }
 }
+
+/* =====================================================================
+ * App screens, second design: big page titles, soft cards, accent icons.
+ * ===================================================================== */
+
+.btn-lg {
+  min-height: 50px;
+  font-size: 15px;
+  border-radius: 12px;
+}
+.btn-soft {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent);
+}
+@media (hover: hover) {
+  .btn-soft:hover {
+    background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  }
+}
+.icon-btn.accent {
+  color: var(--accent);
+}
+@media (hover: hover) {
+  .icon-btn.accent:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+}
+.icon-btn.muted-btn {
+  color: var(--text-muted);
+}
+
+/* Search fields: a soft filled bar instead of an outlined box. */
+.search input {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-muted));
+  border-radius: 12px;
+  min-height: 44px;
+}
+.search {
+  margin-bottom: 4px;
+}
+
+/* Page titles. */
+.page-header h1,
+.home-header .wordmark {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+.home-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.home-header .lockup {
+  font-size: 22px !important;
+}
+
+/* Big tappable cards: Add Friend, Invite Friends, My QR code. */
+.action-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 13px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  color: var(--text);
+  text-align: left;
+}
+@media (hover: hover) {
+  .action-card:hover {
+    background: color-mix(in srgb, var(--accent) 11%, var(--surface));
+  }
+}
+.action-card > svg:last-child {
+  color: var(--text-muted);
+  flex: none;
+}
+.action-card-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  color: var(--accent);
+}
+.action-card-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.action-card-title {
+  font-weight: 650;
+  font-size: 15px;
+}
+.action-card-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.people .section-head {
+  margin: 22px 0 2px;
+}
+.people .online-label {
+  margin: 24px 0 2px;
+}
+
+/* People rows: no card, avatar + name + status + accent actions. */
+.people-list {
+  padding: 0;
+}
+.people-list .list-row {
+  min-height: 62px;
+  padding: 6px 0;
+  gap: 10px;
+}
+.people-list .list-row + .list-row::before {
+  display: none;
+}
+.list-sub .presence-dot {
+  position: static;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 0;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.people-list .icon-btn {
+  width: 40px;
+  height: 40px;
+}
+
+/* The ⋮ menu. */
+.row-menu {
+  position: relative;
+  flex: none;
+}
+.row-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+.row-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 21;
+  display: grid;
+  min-width: 210px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.16);
+}
+.row-menu-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font-weight: 550;
+  text-align: left;
+}
+.row-menu-list button:hover,
+.row-menu-list button:focus-visible {
+  background: var(--surface-muted);
+  outline: none;
+}
+.row-menu-list .is-danger {
+  color: var(--danger);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 16px);
+  transform: translateX(-50%);
+  z-index: 40;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #18181b;
+  color: #fafafa;
+  font-size: 14px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+}
+@media (min-width: 761px) {
+  .toast {
+    bottom: 24px;
+  }
+}
+
+/* ---------- Add Friend flow ---------- */
+
+.add-friend {
+  max-width: 460px;
+  margin-inline: auto;
+}
+.flow-header {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  margin: -8px -8px 6px;
+}
+.flow-header .icon-btn {
+  color: var(--text);
+}
+.flow-header h1 {
+  flex: 1;
+  margin-right: var(--tap);
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.flow-body {
+  display: grid;
+  gap: 12px;
+}
+.flow-hero {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.flow-hero h2,
+.flow-done h2,
+.confirm-card h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.flow-hero .muted,
+.flow-done .muted {
+  max-width: 30ch;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.flow-hero-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 118px;
+  height: 118px;
+  margin: 8px auto 10px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+}
+.flow-hero-badge {
+  position: absolute;
+  right: 4px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 3px solid var(--background);
+}
+.flow-form {
+  display: grid;
+  gap: 12px;
+}
+.handle-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.handle-field .handle-at {
+  left: 15px;
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 700;
+}
+.handle-field input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 14px 0 36px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 16px;
+}
+.handle-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.handle-field input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+.add-friend .divider {
+  margin: 6px 0 -2px;
+}
+.add-friend .action-card {
+  margin-top: 0;
+}
+.results-count {
+  padding: 4px 0 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+.pill-btn {
+  padding: 9px 18px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+.results-empty {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.confirm-card {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 26px 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  text-align: center;
+}
+.confirm-card h2 {
+  margin-top: 10px;
+}
+.confirm-card .btn {
+  margin-top: 8px;
+}
+.confirm-card .btn-primary {
+  margin-top: 18px;
+}
+.confirm-question {
+  margin-top: 18px;
+  font-weight: 650;
+}
+.person-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin: 18px 0 2px;
+}
+.flow-done {
+  justify-items: center;
+  text-align: center;
+  gap: 8px;
+  padding-top: 12px;
+}
+.flow-done .btn-block {
+  margin-top: 4px;
+}
+.flow-hero-icon.is-done {
+  width: 110px;
+  height: 110px;
+}
+.qr-sheet {
+  justify-items: center;
+  gap: 10px;
+  padding: 22px 18px 18px;
+  text-align: center;
+}
+.qr-sheet h2 {
+  font-size: 20px;
+  font-weight: 800;
+}
+.qr-sheet .muted {
+  font-size: 14px;
+}
+.qr-frame {
+  padding: 12px;
+  margin: 6px 0 2px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.qr {
+  display: block;
+}
+.qr-handle {
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+/* ---------- phones: page headers replace the top bar ---------- */
+
+@media (max-width: 760px) {
+  .shell:not(.has-status) .topbar {
+    display: none;
+  }
+  .shell:not(.has-status) .content {
+    padding-top: calc(14px + var(--safe-top));
+  }
+  .nav-item-tab .nav-icon,
+  .nav-item-tab[aria-current='page'] .nav-icon {
+    background: none;
+    width: 30px;
+  }
+  .nav-item-tab[aria-current='page'] {
+    color: var(--accent);
+  }
+  .tabbar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Chats: rows without a card, solid bubbles for my messages. */
+.chat-list.card {
+  border: 0;
+  background: none;
+  padding: 0;
+}
+.chat-list li + li .chat-row {
+  border-top: 0;
+}
+.chat-list-pane .search {
+  margin: 0 4px 6px;
+}
+.chat-list-header .icon-btn.accent,
+.thread-header .icon-btn.accent {
+  color: var(--accent);
+}
+.is-mine .bubble.kind-text {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.is-mine .bubble.kind-text .msg-meta,
+.is-mine .bubble.kind-text .ticks,
+.is-mine .bubble.kind-text .msg-text a {
+  color: color-mix(in srgb, var(--accent-ink) 78%, transparent);
+}
+
+/* Calls: full-width All / Missed switch under the title. */
+.segmented-full {
+  display: flex;
+  width: 100%;
+  margin-bottom: 8px;
+  border-radius: 12px;
+}
+.segmented-full button {
+  flex: 1;
+  border-radius: 10px;
+}
+.recents .page-header {
+  margin-bottom: 12px;
+}
+.calls-list .list-meta {
+  margin-right: 2px;
+}
+
+/* Settings: label above a soft group of rows, each with a tinted icon. */
+.settings {
+  gap: 0;
+}
+.settings-label {
+  margin: 18px 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.settings-group {
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 6%, var(--border));
+  padding: 0 14px;
+}
+.settings-group.profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+}
+.settings-group .setting-row {
+  gap: 10px 12px;
+  min-height: 54px;
+}
+.settings-group .setting-row > span:first-child.setting-icon + span,
+.settings-group .setting-row > .setting-icon + span {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.setting-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+}
+.setting-icon.is-danger {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--danger);
+}
+.setting-value {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.setting-button {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+.setting-button.is-danger .setting-label {
+  color: var(--danger);
+}
+.settings-group .setting-row-wrap .setting-label {
+  flex: 1;
+}
+.settings-group .username-edit {
+  padding: 12px 0;
+}
+.setting-row > .setting-icon,
+.setting-row > span.setting-icon:first-child {
+  flex: none;
+}
+.settings-group .setting-row:not(.setting-row-wrap) {
+  flex-wrap: nowrap;
+}
+.settings-group .setting-row-wrap .segmented {
+  margin-left: 44px;
+}
+
+/* Call screen: soft purple glow, ringed photo, green Accept, End on its own row. */
+.call-screen:not(.has-video) {
+  background:
+    radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 55%),
+    linear-gradient(180deg, #17123a 0%, var(--background) 70%);
+}
+.call-screen:not(.has-video) .call-avatar .avatar {
+  box-shadow:
+    0 0 0 4px var(--background),
+    0 0 0 18px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 0 0 36px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.call-screen:not(.has-video) .call-avatar {
+  margin-bottom: 30px;
+}
+.call-accept .call-control-icon,
+.call-accept:hover .call-control-icon {
+  background: #22c55e;
+  color: #fff;
+}
+.call-end .call-control-icon,
+.call-accept .call-control-icon {
+  width: clamp(62px, 18vw, 70px);
+  height: clamp(62px, 18vw, 70px);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 0.3);
+}
+.call-screen:not(.has-video) .call-controls {
+  flex-wrap: wrap;
+  row-gap: 26px;
+}
+.call-screen:not(.has-video) .call-controls:not(:has(.call-accept)) .call-end {
+  flex-basis: 100%;
+}

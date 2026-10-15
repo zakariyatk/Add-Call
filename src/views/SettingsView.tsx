@@ -6,9 +6,8 @@ import { brand, type ThemeMode } from '../branding/brand.config';
 import { Icon } from '../components/Icon';
 import { UsernameForm } from '../components/UsernameField';
 import { AvatarEditor } from '../components/AvatarEditor';
-import { Lockup } from '../components/Logo';
 import { removeAvatar, uploadAvatar, useAvatarUrl } from '../profile/avatars';
-import { Avatar, PageHeader, Switch } from '../components/ui';
+import { Avatar, PageHeader, SettingIcon, Switch } from '../components/ui';
 import type { Settings } from '../settings';
 
 const THEMES: { id: ThemeMode; label: string }[] = [
@@ -41,26 +40,27 @@ export function SettingsView({
     <section className="settings">
       <PageHeader title="Settings" />
 
-      <div className="card settings-section">
-        <h2>Account</h2>
-        <div className="profile setting-row-wrap">
-          <ProfilePicture session={session} />
-          <span className="profile-text">
-            <span className="profile-name">{session.name}</span>
-            {username && <span className="profile-handle">@{username}</span>}
-            <span className="profile-email">{session.email}</span>
-          </span>
-          <button type="button" className="btn btn-secondary" onClick={onSignOut}>
-            Sign out
-          </button>
-        </div>
+      <div className="settings-group profile">
+        <ProfilePicture session={session} />
+        <span className="profile-text">
+          <span className="profile-name">{session.name}</span>
+          {username && <span className="profile-handle">@{username}</span>}
+          <span className="profile-email">{session.email}</span>
+        </span>
+      </div>
+
+      <h2 className="settings-label">Account</h2>
+      <div className="settings-group">
         <UsernameRow session={session} username={username} onUsername={onUsername} />
       </div>
 
-      <div className="card settings-section">
-        <h2>Appearance</h2>
+      <h2 className="settings-label">Appearance</h2>
+      <div className="settings-group">
         <div className="setting-row setting-row-wrap">
-          <span className="setting-label" id="theme-label">Theme</span>
+          <SettingIcon name="moon" />
+          <span className="setting-label" id="theme-label">
+            Theme
+          </span>
           <div className="segmented" role="radiogroup" aria-labelledby="theme-label">
             {THEMES.map((t) => (
               <button key={t.id} type="button" role="radio" aria-checked={settings.theme === t.id} onClick={() => set('theme', t.id)}>
@@ -71,29 +71,51 @@ export function SettingsView({
         </div>
       </div>
 
-      <div className="card settings-section">
-        <h2>Calling</h2>
+      <h2 className="settings-label">Calling</h2>
+      <div className="settings-group">
         <Switch
+          icon="waves"
           label="Noise suppression"
           hint="Reduce background noise on your microphone."
           checked={settings.noiseSuppression}
           onChange={(v) => set('noiseSuppression', v)}
         />
-        <Switch label="Start calls with video" checked={settings.startWithVideo} onChange={(v) => set('startWithVideo', v)} />
-        <Switch label="Ring sound" hint="Play a ringtone in this tab for incoming calls." checked={settings.ringSound} onChange={(v) => set('ringSound', v)} />
+        <Switch icon="video" label="Start calls with video" checked={settings.startWithVideo} onChange={(v) => set('startWithVideo', v)} />
+        <Switch
+          icon="bell"
+          label="Ring sound"
+          hint="Play a ringtone in this tab for incoming calls."
+          checked={settings.ringSound}
+          onChange={(v) => set('ringSound', v)}
+        />
         <CallNotifications />
       </div>
 
-      <div className="card settings-section about">
-        <h2>About {brand.name}</h2>
-        <Lockup size={40} />
-        <p className="muted">{brand.tagline}</p>
-        <dl>
-          <dt>Version</dt>
-          <dd>{brand.version}</dd>
-          <dt>Calling</dt>
-          <dd>LiveKit · {connection === 'online' ? 'connected' : connection === 'connecting' ? 'connecting' : 'not connected'}</dd>
-        </dl>
+      <h2 className="settings-label">About</h2>
+      <div className="settings-group">
+        <div className="setting-row">
+          <SettingIcon name="info" />
+          <span>
+            <span className="setting-label">{brand.name}</span>
+            <span className="setting-hint">{brand.tagline}</span>
+          </span>
+          <span className="setting-value">v{brand.version}</span>
+        </div>
+        <div className="setting-row">
+          <SettingIcon name="phone" />
+          <span>
+            <span className="setting-label">Calling</span>
+          </span>
+          <span className="setting-value">
+            {connection === 'online' ? 'Connected' : connection === 'connecting' ? 'Connecting…' : 'Not connected'}
+          </span>
+        </div>
+        <button type="button" className="setting-row setting-button is-danger" onClick={onSignOut}>
+          <SettingIcon name="logout" danger />
+          <span>
+            <span className="setting-label">Sign out</span>
+          </span>
+        </button>
       </div>
     </section>
   );
@@ -121,6 +143,7 @@ function UsernameRow({ session, username, onUsername }: { session: Session; user
     );
   return (
     <div className="setting-row">
+      <SettingIcon name="at" />
       <span>
         <span className="setting-label">Username</span>
         <span className="setting-hint" role="status">
@@ -291,6 +314,7 @@ function CallNotifications() {
             : `Ring this device for calls and messages, even when ${brand.name} is closed.`;
   return (
     <Switch
+      icon="phone"
       label="Call notifications"
       hint={error ?? hint}
       checked={state === 'on'}

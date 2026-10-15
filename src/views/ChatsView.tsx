@@ -134,7 +134,7 @@ function ChatList({
         <h1>Chats</h1>
         <button
           type="button"
-          className={`icon-btn ${starting ? 'is-on' : ''}`}
+          className={`icon-btn accent ${starting ? 'is-on' : ''}`}
           aria-label={starting ? 'Cancel new chat' : 'New chat'}
           title="New chat"
           aria-expanded={starting}
@@ -172,7 +172,7 @@ function ChatList({
         </form>
       )}
 
-      {chat.conversations.length > 6 && (
+      {chat.conversations.length > 0 && (
         <label className="search">
           <Icon name="search" size={18} />
           <input type="search" placeholder="Search chats" aria-label="Search chats" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -346,10 +346,10 @@ function ChatThread({
               <Icon name="userPlus" size={21} />
             </button>
           )}
-          <button type="button" className="icon-btn" aria-label={`Video call ${conv.peer.name}`} title="Video call" onClick={() => onCall(true)}>
+          <button type="button" className="icon-btn accent" aria-label={`Video call ${conv.peer.name}`} title="Video call" onClick={() => onCall(true)}>
             <Icon name="video" size={22} />
           </button>
-          <button type="button" className="icon-btn" aria-label={`Call ${conv.peer.name}`} title="Call" onClick={() => onCall(false)}>
+          <button type="button" className="icon-btn accent" aria-label={`Call ${conv.peer.name}`} title="Call" onClick={() => onCall(false)}>
             <Icon name="phone" size={21} />
           </button>
         </header>
