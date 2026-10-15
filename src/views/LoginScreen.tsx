@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { AuthError, CODE_LENGTH, authApi, type Session } from '../auth/api';
 import { brand } from '../branding/brand.config';
+import { Icon } from '../components/Icon';
 import { Lockup, LogoMark } from '../components/Logo';
 import { isNativeApp } from '../lib/platform';
 
@@ -35,7 +36,8 @@ export function LoginScreen({
   /** An error to show on arrival, e.g. from a failed Google sign-in. */
   error?: string | null;
 }) {
-  const [step, setStep] = useState<'email' | 'code'>('email');
+  // Phones open on a welcome screen first; wider screens show it beside the form instead.
+  const [step, setStep] = useState<'welcome' | 'email' | 'code'>(() => (!notice && !initialError && isPhoneLayout() ? 'welcome' : 'email'));
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(initialError ?? null);
@@ -111,24 +113,30 @@ export function LoginScreen({
     }
   };
 
+  const backToEmail = () => {
+    setStep('email');
+    setError(null);
+  };
+
+  if (step === 'welcome') return <WelcomeScreen onStart={() => setStep('email')} />;
+
   return (
     <div className="login">
       <aside className="login-hero always-dark" aria-hidden="true">
-        <div className="login-hero-mark">
-          <LogoMark size={88} />
+        <FaceCluster />
+        <div className="login-hero-copy">
+          <Lockup size={36} />
+          <p className="login-hero-name">{HEADLINE}</p>
+          <p className="login-hero-tagline">{PITCH}</p>
         </div>
-        <p className="login-hero-name">{brand.name}</p>
-        <p className="login-hero-tagline">{brand.tagline}</p>
       </aside>
 
       <main className="login-main">
         {step === 'email' ? (
           <form className="login-card" onSubmit={submitEmail} noValidate aria-busy={busy}>
-            <div className="login-brand">
-              <Lockup size={36} />
-            </div>
-            <h1>Welcome to {brand.name}</h1>
-            <p className="muted">Enter your email and we'll send you a code. New here? Your account is created automatically.</p>
+            <LoginArt />
+            <h1>Login to {brand.name}</h1>
+            <p className="muted">No password needed. We'll send you a code.</p>
 
             {notice && !error && (
               <p className="form-notice" role="status">
@@ -138,12 +146,12 @@ export function LoginScreen({
 
             {google && (
               <>
-                <button type="button" className="btn btn-secondary btn-block btn-google" onClick={continueWithGoogle} disabled={busy}>
+                <button type="button" className="btn btn-block btn-google" onClick={continueWithGoogle} disabled={busy}>
                   <GoogleMark />
                   Continue with Google
                 </button>
                 <p className="divider" role="separator">
-                  <span>or use your email</span>
+                  <span>or</span>
                 </p>
               </>
             )}
@@ -155,7 +163,8 @@ export function LoginScreen({
                 inputMode="email"
                 autoComplete="email"
                 autoCapitalize="none"
-                autoFocus
+                // On phones the keyboard would cover the form; elsewhere start typing straight away.
+                autoFocus={!isPhoneLayout()}
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -172,12 +181,23 @@ export function LoginScreen({
             )}
 
             <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email.trim()}>
-              {busy ? 'Sending code…' : 'Continue'}
+              {busy ? 'Sending code…' : 'Send code'}
             </button>
+
+            <ul className="login-trust">
+              <li>
+                <Icon name="lock" size={16} />
+                Only used to sign you in — no spam, ever
+              </li>
+              <li>
+                <Icon name="userPlus" size={16} />
+                New here? Your account is created automatically
+              </li>
+            </ul>
           </form>
         ) : (
           <form
-            className="login-card"
+            className="login-card is-code"
             onSubmit={(e) => {
               e.preventDefault();
               if (code.length === CODE_LENGTH) void verify(code);
@@ -185,66 +205,147 @@ export function LoginScreen({
             noValidate
             aria-busy={busy}
           >
-            <div className="login-brand">
-              <Lockup size={36} />
+            <div className="login-topbar">
+              <button type="button" className="icon-btn login-back" aria-label="Back" onClick={backToEmail}>
+                <Icon name="chevronLeft" size={20} />
+              </button>
+              <span>Verification</span>
             </div>
-            <h1>Enter your code</h1>
+            <h1>Enter the {CODE_LENGTH}-digit code</h1>
             <p className="muted" role="status">
-              We sent a {CODE_LENGTH}-digit code to <strong>{email.trim()}</strong>. Check your spam folder if you don't see it.
+              Sent to <strong>{email.trim()}</strong>
+              <br />
+              Check your spam folder if you don't see it.
             </p>
 
-            <label className="field">
-              <span>Code</span>
-              <input
-                className="code-input"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="[0-9]*"
-                maxLength={CODE_LENGTH}
-                autoFocus
-                required
-                value={code}
-                onChange={(e) => onCode(e.target.value)}
-                disabled={busy}
-                aria-invalid={error ? true : undefined}
-                aria-describedby={error ? 'login-error' : undefined}
-              />
-            </label>
+            <CodeBoxes value={code} onChange={onCode} disabled={busy} invalid={!!error} />
 
             {error && (
               <p id="login-error" role="alert" className="form-error">
                 {error}
               </p>
             )}
-
-            <button type="submit" className="btn btn-primary btn-block" disabled={busy || code.length !== CODE_LENGTH}>
-              {busy ? 'Signing in…' : 'Sign in'}
-            </button>
+            {busy && (
+              <p className="login-switch muted" role="status">
+                Signing in…
+              </p>
+            )}
 
             <p className="login-switch">
+              Didn't get it?{' '}
               {resendIn > 0 ? (
-                <span className="muted">Send a new code in {resendIn}s</span>
+                <span className="login-resend-wait">Resend in 0:{String(resendIn).padStart(2, '0')}</span>
               ) : (
                 <button type="button" className="link-btn" onClick={() => void sendCode()} disabled={busy}>
-                  Send a new code
+                  Resend code
                 </button>
               )}
-              {' · '}
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => {
-                  setStep('email');
-                  setError(null);
-                }}
-              >
+            </p>
+            <p className="login-switch">
+              <button type="button" className="link-btn" onClick={backToEmail}>
                 Use a different email
               </button>
             </p>
           </form>
         )}
       </main>
+    </div>
+  );
+}
+
+const HEADLINE = "Let's Connect";
+const PITCH = 'Free voice & video calls with your family and friends — anywhere in the world.';
+
+/** Matches the CSS breakpoint where the side panel gives way to a single column. */
+const isPhoneLayout = () => window.matchMedia('(max-width: 860px)').matches;
+
+const face = (n: number) => `/people/face-${n}.jpg`;
+
+/** Smiling faces around a big one, for the welcome screen and the wide-screen side panel. */
+function FaceCluster() {
+  return (
+    <div className="face-cluster" aria-hidden="true">
+      <span className="face-ring is-outer" />
+      <span className="face-ring is-inner" />
+      <img className="face is-main" src={face(2)} alt="" />
+      <img className="face is-a" src={face(3)} alt="" />
+      <img className="face is-b" src={face(1)} alt="" />
+      <img className="face is-c" src={face(7)} alt="" />
+      <img className="face is-d" src={face(5)} alt="" />
+      <span className="face-chip is-online">
+        <span className="face-dot" /> Ammi · online
+      </span>
+      <span className="face-chip is-call">
+        <Icon name="video" size={14} /> Video call · 12:04
+      </span>
+    </div>
+  );
+}
+
+/** The logo with a few faces around it, above the sign-in form on phones. */
+function LoginArt() {
+  return (
+    <div className="login-art" aria-hidden="true">
+      <span className="login-art-glow" />
+      <LogoMark size={96} />
+      <img className="face is-a" src={face(4)} alt="" />
+      <img className="face is-b" src={face(6)} alt="" />
+      <img className="face is-c" src={face(2)} alt="" />
+    </div>
+  );
+}
+
+function WelcomeScreen({ onStart }: { onStart: () => void }) {
+  return (
+    <main className="welcome always-dark">
+      <FaceCluster />
+      <div className="welcome-body">
+        <Lockup size={34} />
+        <h1>{HEADLINE}</h1>
+        <p>{PITCH}</p>
+        <button type="button" className="btn btn-primary btn-block welcome-start" onClick={onStart}>
+          Get started <Icon name="forward" size={20} />
+        </button>
+      </div>
+    </main>
+  );
+}
+
+/**
+ * One box per digit. A single invisible input sits on top, so typing, pasting
+ * and the phone's "From Mail" code suggestion all work as with a plain field.
+ */
+function CodeBoxes({ value, onChange, disabled, invalid }: { value: string; onChange: (v: string) => void; disabled: boolean; invalid: boolean }) {
+  const [focused, setFocused] = useState(true);
+  return (
+    <div className={`code-boxes${invalid ? ' is-invalid' : ''}`}>
+      <input
+        className="code-boxes-input"
+        type="text"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        pattern="[0-9]*"
+        maxLength={CODE_LENGTH}
+        autoFocus
+        required
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        disabled={disabled}
+        aria-label={`${CODE_LENGTH}-digit code`}
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? 'login-error' : undefined}
+      />
+      {Array.from({ length: CODE_LENGTH }, (_, i) => (
+        <span
+          key={i}
+          aria-hidden="true"
+          className={`code-box${i < value.length ? ' is-filled' : ''}${focused && !disabled && i === Math.min(value.length, CODE_LENGTH - 1) ? ' is-current' : ''}`}
+        >
+          {value[i] ?? ''}
+        </span>
+      ))}
     </div>
   );
 }
