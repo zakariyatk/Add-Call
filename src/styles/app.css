@@ -2937,10 +2937,6 @@ video {
   margin-top: 12px;
 }
 
-.find-form .find-hint {
-  grid-column: 1 / -1;
-  margin: -2px 2px 0;
-}
 .found-person {
   grid-column: 1 / -1;
   display: flex;
@@ -2973,15 +2969,6 @@ video {
   font-weight: 600;
   color: #1f9d55;
 }
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.section-head .group-label {
-  margin-bottom: 0;
-}
 .section-action {
   min-height: 36px;
   padding: 0 4px;
@@ -2993,9 +2980,169 @@ video {
   padding: 0 12px;
   font-size: 13px;
 }
-.online-text {
+.found-person {
+  margin-top: 12px;
+}
+
+/* People page: a contact book with one search box, filters and A–Z sections. */
+.people {
+  max-width: 640px;
+  margin-inline: auto;
+}
+.people .page-header {
+  margin-bottom: 14px;
+}
+.people-add {
+  display: inline-grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.people-search .form-error {
+  margin: 10px 4px 0;
+}
+.people-search-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 14px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+}
+.people-search-field input {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+}
+.people-search-field:focus-within {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.people-find {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.people-find-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.people-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.people-chips {
+  display: flex;
+  gap: 8px;
+}
+.people-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.people-chip[aria-pressed='true'] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--background);
+  font-weight: 600;
+}
+.people-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+}
+.people-letter {
+  margin: 14px 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.people-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.people-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 0 0 0 4px;
+}
+.people-row-main {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.people-row:last-child .people-row-main {
+  border-bottom: 0;
+}
+.people-row .list-sub.is-online {
   color: #1f9d55;
   font-weight: 600;
+}
+.people-row .list-sub.is-busy {
+  color: #b45309;
+  font-weight: 600;
+}
+.people-action {
+  color: var(--accent);
+}
+.people-tip {
+  margin: 22px 8px 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
 }
 @media (max-width: 560px) {
   .found-actions {
