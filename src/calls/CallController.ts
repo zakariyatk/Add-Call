@@ -8,7 +8,7 @@ import type { MediaSession } from './media';
 import { notifyIncomingCall } from './notify';
 import { closeCallNotification, type WorkerMessage } from './push';
 import { RING_TIMEOUT_MS, type CallRow, type PresenceUser } from './protocol';
-import { Ringtone } from './ringtone';
+import { Ringtone, type RingtoneId } from './ringtone';
 import type { CallRecord, Peer } from './types';
 
 /*
@@ -39,6 +39,7 @@ export type CameraFacing = 'user' | 'environment';
 export interface CallPreferences {
   noiseSuppression: boolean;
   ringSound: boolean;
+  ringtone: RingtoneId;
 }
 
 export interface CallUser {
@@ -99,7 +100,7 @@ export class CallController {
   private joined = { online: false, inbox: false };
   private resetTimer: number | null = null;
   private ringTimer: number | null = null;
-  private prefs: CallPreferences = { noiseSuppression: true, ringSound: true };
+  private prefs: CallPreferences = { noiseSuppression: true, ringSound: true, ringtone: 'classic' };
   /**
    * A call to pick up as soon as it arrives (Answer tapped on a notification).
    * Kept across reconnects, since the app may still be signing in; it simply
@@ -248,6 +249,7 @@ export class CallController {
 
   setPreferences(p: CallPreferences) {
     this.prefs = p;
+    this.ringtone.tone = p.ringtone;
     if (!p.ringSound) this.ringtone.stop();
   }
 

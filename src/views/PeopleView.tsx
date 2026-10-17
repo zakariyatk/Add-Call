@@ -1,12 +1,16 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { brand } from '../branding/brand.config';
 import { type PresenceUser } from '../calls/protocol';
 import type { Peer } from '../calls/types';
 import { Icon } from '../components/Icon';
-import { Avatar, CallButton, EmptyState, PageHeader, PresenceAvatar } from '../components/ui';
+import { Avatar, CallButton, EmptyState, PageHeader, PresenceAvatar, type Presence } from '../components/ui';
 import { addContact, removeContact, useContactAction } from '../people/contacts';
+import { groupByLetter, matchesQuery } from '../people/directory';
 import { findPerson, handle, type Person } from '../profile/username';
 
+type Filter = 'all' | 'online';
+
+/** My list as a contact book: one search box, All/Online filters and A–Z sections. */
 export function PeopleView({
   me,
   presence,
@@ -24,25 +28,32 @@ export function PeopleView({
   onMessage: (p: Peer) => void;
 }) {
   const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
   const [found, setFound] = useState<Person | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
   const action = useContactAction();
 
   const listed = new Set(contacts.map((c) => c.email));
   // Presence names nobody: it only says which account ids are online, matched here to your list.
-  const statusOf = (id: string) => presence.find((p) => p.id === id);
+  const statusOf = (id: string): Presence => {
+    const live = presence.find((p) => p.id === id);
+    return live ? (live.busy ? 'busy' : 'online') : 'offline';
+  };
+  const onlineCount = contacts.filter((c) => statusOf(c.id) !== 'offline').length;
+  const shown = contacts.filter((c) => (filter === 'all' || statusOf(c.id) !== 'offline') && matchesQuery(c, query));
+  const typed = query.trim().replace(/^@+/, '');
 
   const search = async (e: FormEvent) => {
     e.preventDefault();
-    const q = query.trim();
-    if (!q.replace(/^@/, '')) return setSearchError('Type their @username (or email).');
+    if (!typed) return setSearchError('Type their @username (or email).');
     setSearching(true);
     setSearchError(null);
     setFound(null);
     try {
-      const person = await findPerson(q);
+      const person = await findPerson(query);
       if (!person) setSearchError(`No one on ${brand.name} has that username. Check the spelling.`);
       else if (person.email === me.email) setSearchError('That’s you.');
       else setFound(person);
@@ -53,48 +64,64 @@ export function PeopleView({
     }
   };
 
+  const typing = (value: string) => {
+    setQuery(value);
+    setSearchError(null);
+    setFound(null);
+  };
+
   const add = (key: string, q: string) => void action.run(key, () => addContact(q));
 
   return (
     <section className="people">
-      <PageHeader title="People" />
+      <PageHeader title="People">
+        <button
+          type="button"
+          className="people-add"
+          aria-label="Find someone to add"
+          title="Find someone"
+          onClick={() => {
+            setFilter('all');
+            searchInput.current?.focus();
+          }}
+        >
+          <Icon name="plus" size={22} />
+        </button>
+      </PageHeader>
 
-      <form className="card dial-form find-form" onSubmit={search} noValidate>
-        <label className="field">
-          <span>Find someone by username</span>
-          <span className="handle-input">
-            <span className="handle-at" aria-hidden="true">
-              @
-            </span>
-            <input
-              type="search"
-              enterKeyHint="search"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              placeholder="username"
-              value={query}
-              onChange={(e) => (setQuery(e.target.value.replace(/^@+/, '')), setSearchError(null))}
-              aria-invalid={searchError ? true : undefined}
-              aria-describedby={searchError ? 'find-error' : 'find-hint'}
-            />
-          </span>
+      <form className="people-search" role="search" onSubmit={search} noValidate>
+        <label className="people-search-field">
+          <Icon name="search" size={18} />
+          <input
+            ref={searchInput}
+            type="search"
+            enterKeyHint="search"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="Search your list or find @username"
+            aria-label="Search your list or find someone by @username"
+            value={query}
+            onChange={(e) => typing(e.target.value)}
+            aria-invalid={searchError ? true : undefined}
+            aria-describedby={searchError ? 'find-error' : undefined}
+          />
         </label>
-        <div className="dial-actions">
-          <button type="submit" className="btn btn-primary" disabled={searching}>
-            <Icon name="search" size={18} /> {searching ? 'Finding…' : 'Find'}
+        {typed && !found && (
+          <button type="submit" className="people-find" disabled={searching}>
+            <span className="people-find-icon">
+              <Icon name="userPlus" size={18} />
+            </span>
+            <span className="list-main">
+              <span className="list-title">{searching ? 'Finding…' : `Find @${typed} on ${brand.name}`}</span>
+              <span className="list-sub">Search everyone, not just your list</span>
+            </span>
           </button>
-        </div>
-        {searchError ? (
+        )}
+        {searchError && (
           <p id="find-error" role="alert" className="form-error">
             {searchError}
           </p>
-        ) : (
-          !found && (
-            <p id="find-hint" className="field-hint find-hint">
-              You can call or message anyone you find, and add them to your list. An email address works too.
-            </p>
-          )
         )}
         {found && (
           <div className="found-person">
@@ -130,79 +157,98 @@ export function PeopleView({
         )}
       </form>
 
-      <div className="section-head">
-        <h2 className="group-label">My list{contacts.length > 0 && ` · ${contacts.length}`}</h2>
-        {contacts.length > 0 && (
+      {contacts.length > 0 && (
+        <div className="people-filters">
+          <div className="people-chips" role="group" aria-label="Show">
+            <button type="button" className="people-chip" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
+              All · {contacts.length}
+            </button>
+            <button type="button" className="people-chip" aria-pressed={filter === 'online'} onClick={() => setFilter('online')}>
+              <span className="people-chip-dot" aria-hidden="true" />
+              Online · {onlineCount}
+            </button>
+          </div>
           <button type="button" className="link-btn section-action" onClick={() => setEditing((v) => !v)} aria-pressed={editing}>
             {editing ? 'Done' : 'Edit'}
           </button>
-        )}
-      </div>
+        </div>
+      )}
+
       {!contactsLoaded ? (
         <EmptyState>Loading…</EmptyState>
       ) : contacts.length === 0 ? (
-        <EmptyState>Your list is empty. Find people by their @username above and tap “Add to my list”.</EmptyState>
+        <EmptyState icon="users" title="Your list is empty">
+          Tap + and type someone’s @username to find them, then add them to your list.
+        </EmptyState>
+      ) : shown.length === 0 ? (
+        <EmptyState>{typed ? 'No one in your list matches. Tap Find to search everyone.' : 'No one in your list is online right now.'}</EmptyState>
       ) : (
-        <ul className="list card">
-          {contacts.map((c) => {
-            const live = statusOf(c.id);
-            return (
-              <PersonRow
-                key={c.id}
-                person={c}
-                online={!!live}
-                busy={!!live?.busy}
-                actions={
-                  editing ? (
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-danger btn-small"
-                      disabled={action.busy === c.id}
-                      onClick={() => void action.run(c.id, () => removeContact(c.id))}
-                    >
-                      <Icon name="userMinus" size={18} /> Remove
-                    </button>
-                  ) : (
-                    <>
-                      <button type="button" className="icon-btn" aria-label={`Message ${c.name}`} title="Message" onClick={() => onMessage(c)}>
-                        <Icon name="message" size={20} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn hide-narrow"
-                        aria-label={`Video call ${c.name}`}
-                        title="Video call"
-                        disabled={live?.busy}
-                        onClick={() => onCall(c, true)}
-                      >
-                        <Icon name="video" size={20} />
-                      </button>
-                      <CallButton label={`Call ${c.name}`} disabled={live?.busy} onClick={() => onCall(c, false)} />
-                    </>
-                  )
-                }
-              />
-            );
-          })}
-        </ul>
+        <>
+          {groupByLetter(shown).map((section) => (
+            <div key={section.letter} className="people-section">
+              <h2 className="people-letter">{section.letter}</h2>
+              <ul className="people-list">
+                {section.people.map((c) => (
+                  <PersonRow
+                    key={c.id}
+                    person={c}
+                    status={statusOf(c.id)}
+                    editing={editing}
+                    removing={action.busy === c.id}
+                    onRemove={() => void action.run(c.id, () => removeContact(c.id))}
+                    onCall={onCall}
+                    onMessage={onMessage}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))}
+          {!typed && <p className="people-tip">Tap + to find someone by their @username and add them.</p>}
+        </>
       )}
-
     </section>
   );
 }
 
-function PersonRow({ person, online, busy, actions }: { person: Person; online: boolean; busy: boolean; actions: ReactNode }) {
+function PersonRow({
+  person,
+  status,
+  editing,
+  removing,
+  onRemove,
+  onCall,
+  onMessage,
+}: {
+  person: Person;
+  status: Presence;
+  editing: boolean;
+  removing: boolean;
+  onRemove: () => void;
+  onCall: (p: Peer, video: boolean) => void;
+  onMessage: (p: Peer) => void;
+}) {
+  const busy = status === 'busy';
   return (
-    <li className="list-row">
-      <PresenceAvatar name={person.name} email={person.email} status={busy ? 'busy' : online ? 'online' : 'offline'} />
-      <span className="list-main">
+    <li className="people-row">
+      <PresenceAvatar name={person.name} email={person.email} status={status} size={46} />
+      <button type="button" className="people-row-main" aria-label={`Message ${person.name}`} onClick={() => onMessage(person)}>
         <span className="list-title">{person.name}</span>
-        <span className="list-sub">
-          {busy ? 'On a call' : handle(person.username, person.email)}
-          {online && !busy && <span className="online-text"> · online</span>}
-        </span>
-      </span>
-      {actions}
+        <span className={`list-sub is-${status}`}>{status === 'online' ? 'Online' : busy ? 'On a call' : handle(person.username, person.email)}</span>
+      </button>
+      {editing ? (
+        <button type="button" className="btn btn-secondary btn-danger btn-small" disabled={removing} onClick={onRemove}>
+          <Icon name="userMinus" size={18} /> Remove
+        </button>
+      ) : (
+        <>
+          <button type="button" className="icon-btn people-action" aria-label={`Video call ${person.name}`} title="Video call" disabled={busy} onClick={() => onCall(person, true)}>
+            <Icon name="video" size={21} />
+          </button>
+          <button type="button" className="icon-btn people-action" aria-label={`Call ${person.name}`} title="Call" disabled={busy} onClick={() => onCall(person, false)}>
+            <Icon name="phone" size={21} />
+          </button>
+        </>
+      )}
     </li>
   );
 }

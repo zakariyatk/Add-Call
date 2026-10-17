@@ -6,9 +6,9 @@ describe('settings', () => {
   it('defaults, round-trips and repairs bad values', () => {
     const store = memoryStore();
     expect(loadSettings(store)).toEqual(DEFAULT_SETTINGS);
-    saveSettings(store, { ...DEFAULT_SETTINGS, theme: 'dark', ringSound: false });
-    expect(loadSettings(store)).toMatchObject({ theme: 'dark', ringSound: false });
-    store.setItem(SETTINGS_KEY, JSON.stringify({ theme: 'neon', noiseSuppression: 'yes' }));
+    saveSettings(store, { ...DEFAULT_SETTINGS, theme: 'dark', ringSound: false, ringtone: 'soft' });
+    expect(loadSettings(store)).toMatchObject({ theme: 'dark', ringSound: false, ringtone: 'soft' });
+    store.setItem(SETTINGS_KEY, JSON.stringify({ theme: 'neon', noiseSuppression: 'yes', ringtone: 'disco' }));
     expect(loadSettings(store)).toEqual(DEFAULT_SETTINGS);
   });
 });

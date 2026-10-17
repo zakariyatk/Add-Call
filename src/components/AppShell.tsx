@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '../auth/api';
 import type { ConnectionStatus } from '../calls/CallController';
 import { brand } from '../branding/brand.config';
@@ -15,13 +15,30 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
   offline: 'Offline',
 };
 
+/** How long a reconnect may take before it's worth mentioning (opening the app always takes a moment). */
+const STATUS_GRACE_MS = 4000;
+
+/** The connection as worth showing: 'online' until it has been down for STATUS_GRACE_MS. */
+function useShownConnection(connection: ConnectionStatus): ConnectionStatus {
+  const [shown, setShown] = useState<ConnectionStatus>('online');
+  useEffect(() => {
+    if (connection === 'online') {
+      setShown('online');
+      return;
+    }
+    const timer = setTimeout(() => setShown(connection), STATUS_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [connection]);
+  return shown;
+}
+
 export function AppShell({
   view,
   onNavigate,
   session,
   onSignOut,
   badges,
-  connection,
+  connection: actual,
   layout = 'page',
   children,
 }: {
@@ -36,6 +53,7 @@ export function AppShell({
   layout?: 'page' | 'split' | 'focus';
   children: ReactNode;
 }) {
+  const connection = useShownConnection(actual);
   const navItems = (variant: 'side' | 'tab') =>
     NAV.map((item) => (
       <a

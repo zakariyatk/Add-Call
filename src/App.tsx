@@ -20,6 +20,7 @@ import { PeopleView } from './views/PeopleView';
 import { RecentsView } from './views/RecentsView';
 import { VerifyEmailLink } from './views/VerifyEmailScreen';
 import { SettingsView } from './views/SettingsView';
+import { isSettingsPage, type SettingsPage } from './views/settingsPages';
 import { ChatsView } from './views/ChatsView';
 import { useChat } from './chat/useChat';
 import { resetAvatars } from './profile/avatars';
@@ -34,12 +35,16 @@ const seenKey = (email: string) => storageKey(`recentsSeen.${email}`);
 
 const CHAT_ROUTE = /^chats\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
-/** #/recents → recents; #/chats/<id> → that chat; anything else → the chat list. */
-const routeFromHash = (): { view: ViewId; chatId: string | null } => {
+const SETTINGS_ROUTE = /^settings\/([a-z]+)$/;
+
+/** #/recents → recents; #/chats/<id> → that chat; #/settings/<page> → a settings page; anything else → the chat list. */
+const routeFromHash = (): { view: ViewId; chatId: string | null; settingsPage: SettingsPage | null } => {
   const path = window.location.hash.replace(/^#\/?/, '');
   const chat = CHAT_ROUTE.exec(path);
-  if (chat) return { view: 'chats', chatId: chat[1].toLowerCase() };
-  return { view: NAV.some((n) => n.id === path) ? (path as ViewId) : 'chats', chatId: null };
+  if (chat) return { view: 'chats', chatId: chat[1].toLowerCase(), settingsPage: null };
+  const settings = SETTINGS_ROUTE.exec(path);
+  if (settings && isSettingsPage(settings[1])) return { view: 'settings', chatId: null, settingsPage: settings[1] };
+  return { view: NAV.some((n) => n.id === path) ? (path as ViewId) : 'chats', chatId: null, settingsPage: null };
 };
 
 export default function App() {
@@ -50,7 +55,7 @@ export default function App() {
   const [verifyToken, setVerifyToken] = useState(takeVerifyToken);
   const [settings, setSettings] = useState<Settings>(() => loadSettings(store));
   const [route, setRoute] = useState(routeFromHash);
-  const { view, chatId } = route;
+  const { view, chatId, settingsPage } = route;
   const [history, setHistory] = useState<CallRecord[]>([]);
   const [recentsSeen, setRecentsSeen] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -123,7 +128,10 @@ export default function App() {
     },
     [session],
   );
-  const prefs = useMemo(() => ({ noiseSuppression: settings.noiseSuppression, ringSound: settings.ringSound }), [settings]);
+  const prefs = useMemo(
+    () => ({ noiseSuppression: settings.noiseSuppression, ringSound: settings.ringSound, ringtone: settings.ringtone }),
+    [settings],
+  );
   const calling = useCalling(session ?? null, prefs, addRecord);
   const { call, controller, connection } = calling;
   const signedInId = session ? session.id : null;
@@ -199,9 +207,15 @@ export default function App() {
   }, [call.status]);
 
   function navigate(v: ViewId, id: string | null = null) {
-    setRoute({ view: v, chatId: id });
+    setRoute({ view: v, chatId: v === 'chats' ? id : null, settingsPage: v === 'settings' && id && isSettingsPage(id) ? id : null });
     const hash = id ? `#/${v}/${id}` : `#/${v}`;
-    if (window.location.hash !== hash) window.history.pushState(null, '', hash);
+    if (window.location.hash !== hash) window.history.pushState({ from: window.location.hash }, '', hash);
+  }
+
+  /** Back from a settings page: the way the person came (so the phone's back button agrees), else to Settings. */
+  function settingsBack() {
+    if ((window.history.state as { from?: string } | null)?.from === '#/settings') window.history.back();
+    else navigate('settings');
   }
 
   const missedCount = useMemo(() => history.filter((r) => r.direction === 'missed' && r.at > recentsSeen).length, [history, recentsSeen]);
@@ -363,6 +377,9 @@ export default function App() {
         )}
         {view === 'settings' && (
           <SettingsView
+            page={settingsPage}
+            onOpen={(p) => navigate('settings', p)}
+            onBack={settingsBack}
             session={session}
             settings={settings}
             onChange={setSettings}

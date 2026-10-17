@@ -5,15 +5,17 @@ import { disablePush, enablePush, pushState, type PushState } from '../calls/pus
 import { canShowFullScreen, openFullScreenSettings } from '../calls/nativePush';
 import { isNativeApp } from '../lib/platform';
 import { brand, type ThemeMode } from '../branding/brand.config';
-import { Icon } from '../components/Icon';
+import { Icon, type IconName } from '../components/Icon';
 import { UsernameForm } from '../components/UsernameField';
 import { AvatarEditor } from '../components/AvatarEditor';
 import { Lockup } from '../components/Logo';
 import { removeAvatar, uploadAvatar, useAvatarUrl } from '../profile/avatars';
 import { unblockUser } from '../people/blocks';
 import { handle, type Person } from '../profile/username';
-import { Avatar, PageHeader, Switch } from '../components/ui';
+import { Avatar, Switch } from '../components/ui';
 import type { Settings } from '../settings';
+import type { SettingsPage } from './settingsPages';
+import { previewRingtone, RINGTONE_IDS, type RingtoneId } from '../calls/ringtone';
 
 const THEMES: { id: ThemeMode; label: string }[] = [
   { id: 'system', label: 'System' },
@@ -21,7 +23,22 @@ const THEMES: { id: ThemeMode; label: string }[] = [
   { id: 'dark', label: 'Dark' },
 ];
 
+const RINGTONE_LABELS: Record<RingtoneId, string> = { classic: 'Classic', bright: 'Bright', soft: 'Soft' };
+
+const PAGE_TITLES: Record<SettingsPage, string> = {
+  profile: 'Edit profile',
+  appearance: 'Appearance',
+  calling: 'Calling',
+  notifications: 'Notifications',
+  blocked: 'Blocked people',
+  about: `About ${brand.name}`,
+  delete: 'Delete account',
+};
+
 export function SettingsView({
+  page,
+  onOpen,
+  onBack,
   session,
   settings,
   onChange,
@@ -32,6 +49,10 @@ export function SettingsView({
   blocked,
   onDeleteAccount,
 }: {
+  /** The page open inside Settings; null for the main list. */
+  page: SettingsPage | null;
+  onOpen: (page: SettingsPage) => void;
+  onBack: () => void;
   connection: ConnectionStatus;
   /** People I blocked. */
   blocked: Person[];
@@ -46,86 +67,260 @@ export function SettingsView({
   onSignOut: () => void;
 }) {
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => onChange({ ...settings, [k]: v });
+  const [notifications, setNotifications] = useState<PushState | null>(null);
+  useEffect(() => {
+    if (page) return;
+    let live = true;
+    void pushState().then((s) => live && setNotifications(s));
+    return () => {
+      live = false;
+    };
+  }, [page]);
+
+  if (page)
+    return (
+      <section className="settings settings-page" aria-labelledby="settings-page-title">
+        <header className="settings-page-header">
+          <button type="button" className="icon-btn" onClick={onBack} aria-label="Back to Settings">
+            <Icon name="back" size={22} />
+          </button>
+          <h1 id="settings-page-title">{PAGE_TITLES[page]}</h1>
+        </header>
+
+        {page === 'profile' && (
+          <>
+            <div className="settings-hero">
+              <ProfilePicture session={session} size={104} />
+              <span className="settings-hero-name">{session.name}</span>
+            </div>
+            <div className="settings-group">
+              <UsernameRow session={session} username={username} onUsername={onUsername} />
+            </div>
+          </>
+        )}
+
+        {page === 'appearance' && (
+          <div className="settings-group">
+            <div className="setting-row setting-row-wrap">
+              <span className="setting-label" id="theme-label">
+                Theme
+              </span>
+              <div className="segmented" role="radiogroup" aria-labelledby="theme-label">
+                {THEMES.map((t) => (
+                  <button key={t.id} type="button" role="radio" aria-checked={settings.theme === t.id} onClick={() => set('theme', t.id)}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {page === 'calling' && (
+          <>
+            <h2 className="settings-heading" id="ringtone-label">
+              Ringtone
+            </h2>
+            <div className="settings-group" role="radiogroup" aria-labelledby="ringtone-label">
+              {RINGTONE_IDS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={settings.ringtone === id}
+                  className="settings-choice"
+                  onClick={() => (set('ringtone', id), previewRingtone(id))}
+                >
+                  <span className="settings-row-title">{RINGTONE_LABELS[id]}</span>
+                  {settings.ringtone === id && <Icon name="check" size={20} strokeWidth={2.2} />}
+                </button>
+              ))}
+            </div>
+            <div className="settings-group">
+              <Switch label="Ring sound" hint="Play the ringtone in the app for incoming calls." checked={settings.ringSound} onChange={(v) => set('ringSound', v)} />
+              <Switch
+                label="Noise suppression"
+                hint="Reduce background noise on your microphone."
+                checked={settings.noiseSuppression}
+                onChange={(v) => set('noiseSuppression', v)}
+              />
+              <Switch label="Start calls with video" checked={settings.startWithVideo} onChange={(v) => set('startWithVideo', v)} />
+            </div>
+          </>
+        )}
+
+        {page === 'notifications' && (
+          <div className="settings-group">
+            <CallNotifications />
+          </div>
+        )}
+
+        {page === 'blocked' && <BlockedPeople blocked={blocked} />}
+
+        {page === 'about' && (
+          <div className="settings-group about">
+            <Lockup size={40} />
+            <p className="muted">{brand.tagline}</p>
+            <dl>
+              <dt>Version</dt>
+              <dd>{brand.version}</dd>
+              <dt>Calling</dt>
+              <dd>LiveKit · {connection === 'online' ? 'connected' : connection === 'connecting' ? 'connecting' : 'not connected'}</dd>
+            </dl>
+          </div>
+        )}
+
+        {page === 'delete' && <DeleteAccount onDelete={onDeleteAccount} onCancel={onBack} />}
+      </section>
+    );
 
   return (
-    <section className="settings">
-      <PageHeader title="Settings" />
+    <section className="settings" aria-labelledby="settings-title">
+      <h1 id="settings-title" className="settings-title">
+        Settings
+      </h1>
 
-      <div className="card settings-section">
-        <h2>Account</h2>
-        <div className="profile setting-row-wrap">
-          <ProfilePicture session={session} />
-          <span className="profile-text">
-            <span className="profile-name">{session.name}</span>
-            {username && <span className="profile-handle">@{username}</span>}
-            <span className="profile-email">{session.email}</span>
-          </span>
-          <button type="button" className="btn btn-secondary" onClick={onSignOut}>
-            Sign out
-          </button>
-        </div>
-        <UsernameRow session={session} username={username} onUsername={onUsername} />
-        <DeleteAccountRow onDelete={onDeleteAccount} />
+      <div className="settings-hero">
+        <ProfilePicture session={session} size={104} />
+        <span className="settings-hero-name">{session.name}</span>
+        {username && <span className="settings-hero-handle">@{username}</span>}
       </div>
 
-      <div className="card settings-section">
-        <h2>Appearance</h2>
-        <div className="setting-row setting-row-wrap">
-          <span className="setting-label" id="theme-label">Theme</span>
-          <div className="segmented" role="radiogroup" aria-labelledby="theme-label">
-            {THEMES.map((t) => (
-              <button key={t.id} type="button" role="radio" aria-checked={settings.theme === t.id} onClick={() => set('theme', t.id)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <InviteCard username={username} />
+
+      <h2 className="settings-heading">Account</h2>
+      <div className="settings-group">
+        <NavRow icon="user" title="Edit profile" hint="Picture and @username" onClick={() => onOpen('profile')} />
+        <NavRow icon="theme" title="Appearance" value={THEMES.find((t) => t.id === settings.theme)?.label} onClick={() => onOpen('appearance')} />
       </div>
 
-      <div className="card settings-section">
-        <h2>Calling</h2>
-        <Switch
-          label="Noise suppression"
-          hint="Reduce background noise on your microphone."
-          checked={settings.noiseSuppression}
-          onChange={(v) => set('noiseSuppression', v)}
+      <h2 className="settings-heading">Calls and notifications</h2>
+      <div className="settings-group">
+        <NavRow icon="phone" title="Calling" hint="Ringtone, noise suppression, video" onClick={() => onOpen('calling')} />
+        <NavRow
+          icon="bell"
+          title="Notifications"
+          hint={`Ring when ${brand.name} is closed`}
+          value={notifications === 'on' ? 'On' : notifications === null ? undefined : 'Off'}
+          valueTone={notifications === 'on' ? 'ok' : undefined}
+          onClick={() => onOpen('notifications')}
         />
-        <Switch label="Start calls with video" checked={settings.startWithVideo} onChange={(v) => set('startWithVideo', v)} />
-        <Switch label="Ring sound" hint="Play a ringtone in this tab for incoming calls." checked={settings.ringSound} onChange={(v) => set('ringSound', v)} />
-        <CallNotifications />
       </div>
 
-      <div className="card settings-section">
-        <h2>Privacy and safety</h2>
-        <BlockedPeople blocked={blocked} />
-        <div className="setting-row">
-          <span>
-            <span className="setting-label">Privacy policy</span>
-            <span className="setting-hint">What {brand.name} collects and how it’s used.</span>
-          </span>
-          <a className="btn btn-secondary" href={`${brand.website}/privacy`} target="_blank" rel="noopener noreferrer">
-            Read
-          </a>
-        </div>
+      <h2 className="settings-heading">Privacy and help</h2>
+      <div className="settings-group">
+        <NavRow icon="ban" title="Blocked people" value={blocked.length ? String(blocked.length) : 'None'} onClick={() => onOpen('blocked')} />
+        <NavRow icon="shield" title="Privacy policy" href={`${brand.website}/privacy`} />
+        <NavRow icon="help" title="Help and support" hint={brand.supportEmail} href={`mailto:${brand.supportEmail}?subject=${encodeURIComponent(`${brand.name} help`)}`} />
+        <NavRow icon="info" title={`About ${brand.name}`} value={brand.version} onClick={() => onOpen('about')} />
       </div>
 
-      <div className="card settings-section about">
-        <h2>About {brand.name}</h2>
-        <Lockup size={40} />
-        <p className="muted">{brand.tagline}</p>
-        <dl>
-          <dt>Version</dt>
-          <dd>{brand.version}</dd>
-          <dt>Calling</dt>
-          <dd>LiveKit · {connection === 'online' ? 'connected' : connection === 'connecting' ? 'connecting' : 'not connected'}</dd>
-        </dl>
+      <div className="settings-group">
+        <NavRow icon="logout" title="Sign out" onClick={onSignOut} plain />
+        <NavRow icon="trash" title="Delete account" onClick={() => onOpen('delete')} plain danger />
       </div>
     </section>
   );
 }
 
+/** One line of the Settings list: an icon, a title, and what it opens. */
+function NavRow({
+  icon,
+  title,
+  hint,
+  value,
+  valueTone,
+  onClick,
+  href,
+  plain,
+  danger,
+}: {
+  icon: IconName;
+  title: string;
+  hint?: string;
+  value?: string;
+  valueTone?: 'ok';
+  onClick?: () => void;
+  /** Opens outside the app (a web page, an email). */
+  href?: string;
+  /** An action, not a page: no arrow. */
+  plain?: boolean;
+  danger?: boolean;
+}) {
+  const content = (
+    <>
+      <span className="settings-row-icon" aria-hidden="true">
+        <Icon name={icon} size={19} />
+      </span>
+      <span className="settings-row-text">
+        <span className="settings-row-title">{title}</span>
+        {hint && <span className="settings-row-hint">{hint}</span>}
+      </span>
+      {value && <span className={`settings-row-value ${valueTone === 'ok' ? 'is-ok' : ''}`}>{value}</span>}
+      {!plain && (
+        <span className="settings-row-go" aria-hidden="true">
+          <Icon name="forward" size={16} strokeWidth={2} />
+        </span>
+      )}
+    </>
+  );
+  const className = `settings-row ${danger ? 'is-danger' : ''}`;
+  if (href)
+    return (
+      <a className={className} href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer">
+        {content}
+      </a>
+    );
+  return (
+    <button type="button" className={className} onClick={onClick}>
+      {content}
+    </button>
+  );
+}
+
+/** Shares your @username, so friends can find and call you. */
+function InviteCard({ username }: { username: string | null }) {
+  const [copied, setCopied] = useState(false);
+  const text = `Call me on ${brand.name}${username ? `: I'm @${username}` : ''}. ${brand.website}`;
+  const invite = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: brand.name, text });
+        return;
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 4000);
+    } catch {
+      /* nothing to fall back to */
+    }
+  };
+  return (
+    <button type="button" className="invite-card" onClick={() => void invite()}>
+      <span className="invite-card-text">
+        <span className="invite-card-title">Invite friends</span>
+        <span className="invite-card-hint" role="status">
+          {copied ? 'Invite copied. Paste it in a message to a friend.' : 'Share your @username so they can call you'}
+        </span>
+      </span>
+      <span className="invite-card-art" aria-hidden="true">
+        <span className="invite-card-bubble">
+          <span />
+          <span />
+        </span>
+        <span className="invite-card-plus">
+          <Icon name="plus" size={18} strokeWidth={2.6} />
+        </span>
+      </span>
+    </button>
+  );
+}
+
 function BlockedPeople({ blocked }: { blocked: Person[] }) {
-  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const unblock = async (p: Person) => {
@@ -141,23 +336,11 @@ function BlockedPeople({ blocked }: { blocked: Person[] }) {
   };
   return (
     <>
-      <div className="setting-row">
-        <span>
-          <span className="setting-label">Blocked people</span>
-          <span className="setting-hint">
-            {blocked.length
-              ? `${blocked.length} ${blocked.length === 1 ? 'person' : 'people'}. People you block can’t call or message you.`
-              : 'No one. Block someone from your chat with them (⋮ → Block).'}
-          </span>
-        </span>
-        {blocked.length > 0 && (
-          <button type="button" className="btn btn-secondary" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-            {open ? 'Hide' : 'Show'}
-          </button>
-        )}
-      </div>
-      {open && blocked.length > 0 && (
-        <ul className="list blocked-list">
+      <p className="settings-note">
+        {blocked.length ? 'People you block can’t call or message you.' : 'No one. Block someone from your chat with them (⋮ → Block).'}
+      </p>
+      {blocked.length > 0 && (
+        <ul className="settings-group list blocked-list">
           {blocked.map((p) => (
             <li key={p.id} className="list-row">
               <Avatar name={p.name} email={p.email} size={36} />
@@ -182,8 +365,7 @@ function BlockedPeople({ blocked }: { blocked: Person[] }) {
 }
 
 /** Deletes the account, after saying exactly what goes with it. */
-function DeleteAccountRow({ onDelete }: { onDelete: () => Promise<void> }) {
-  const [confirming, setConfirming] = useState(false);
+function DeleteAccount({ onDelete, onCancel }: { onDelete: () => Promise<void>; onCancel: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const run = async () => {
@@ -196,20 +378,8 @@ function DeleteAccountRow({ onDelete }: { onDelete: () => Promise<void> }) {
       setBusy(false);
     }
   };
-  if (!confirming)
-    return (
-      <div className="setting-row">
-        <span>
-          <span className="setting-label">Delete account</span>
-          <span className="setting-hint">Remove your account and everything in it.</span>
-        </span>
-        <button type="button" className="btn btn-secondary btn-danger" onClick={() => setConfirming(true)}>
-          Delete account
-        </button>
-      </div>
-    );
   return (
-    <div className="delete-account" role="group" aria-labelledby="delete-account-title">
+    <div className="settings-group delete-account" role="group" aria-labelledby="delete-account-title">
       <p id="delete-account-title" className="setting-label">
         Delete your account?
       </p>
@@ -224,7 +394,7 @@ function DeleteAccountRow({ onDelete }: { onDelete: () => Promise<void> }) {
         </p>
       )}
       <div className="delete-account-actions">
-        <button type="button" className="btn btn-secondary" onClick={() => (setConfirming(false), setError(null))} disabled={busy}>
+        <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>
           Cancel
         </button>
         <button type="button" className="btn btn-danger-fill" onClick={() => void run()} disabled={busy}>
@@ -274,7 +444,7 @@ function UsernameRow({ session, username, onUsername }: { session: Session; user
  * Your picture. Tapping it opens a menu like WhatsApp's (take or choose a
  * photo, view, remove); a new photo opens the move-and-scale editor first.
  */
-function ProfilePicture({ session }: { session: Session }) {
+function ProfilePicture({ session, size = 64 }: { session: Session; size?: number }) {
   const gallery = useRef<HTMLInputElement>(null);
   const camera = useRef<HTMLInputElement>(null);
   const url = useAvatarUrl(session.email);
@@ -321,7 +491,7 @@ function ProfilePicture({ session }: { session: Session }) {
         aria-label={url ? 'Profile picture options' : 'Add profile picture'}
         title={url ? 'Change picture' : 'Add picture'}
       >
-        <Avatar name={session.name} email={session.email} size={64} />
+        <Avatar name={session.name} email={session.email} size={size} />
         <span className="avatar-edit-badge" aria-hidden="true">
           {busy ? <span className="upload-spinner" /> : <Icon name="camera" size={16} />}
         </span>
