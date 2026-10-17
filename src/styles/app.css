@@ -1197,14 +1197,6 @@ video {
   color: var(--accent);
   font-weight: 550;
 }
-.settings-hero-email {
-  font-size: 13.5px;
-  color: var(--text-muted);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .settings-heading {
   font-size: 12px;
   font-weight: 650;

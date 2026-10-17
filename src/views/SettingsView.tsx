@@ -92,7 +92,6 @@ export function SettingsView({
             <div className="settings-hero">
               <ProfilePicture session={session} size={104} />
               <span className="settings-hero-name">{session.name}</span>
-              <span className="settings-hero-email">{session.email}</span>
             </div>
             <div className="settings-group">
               <UsernameRow session={session} username={username} onUsername={onUsername} />
@@ -185,7 +184,6 @@ export function SettingsView({
         <ProfilePicture session={session} size={104} />
         <span className="settings-hero-name">{session.name}</span>
         {username && <span className="settings-hero-handle">@{username}</span>}
-        <span className="settings-hero-email">{session.email}</span>
       </div>
 
       <InviteCard username={username} />
