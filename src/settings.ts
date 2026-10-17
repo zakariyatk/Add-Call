@@ -1,5 +1,6 @@
 import type { ThemeMode } from './branding/brand.config';
 import { brand } from './branding/brand.config';
+import { RINGTONE_IDS, type RingtoneId } from './calls/ringtone';
 import { readJson, storageKey, type KeyValueStore } from './lib/storage';
 
 export interface Settings {
@@ -7,6 +8,7 @@ export interface Settings {
   noiseSuppression: boolean;
   startWithVideo: boolean;
   ringSound: boolean;
+  ringtone: RingtoneId;
 }
 
 // The key must match the pre-paint theme script that vite.brand.ts writes into index.html.
@@ -17,6 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
   noiseSuppression: true,
   startWithVideo: false,
   ringSound: true,
+  ringtone: 'classic',
 };
 
 export function loadSettings(store: KeyValueStore): Settings {
@@ -28,6 +31,7 @@ export function loadSettings(store: KeyValueStore): Settings {
     noiseSuppression: bool(saved.noiseSuppression, DEFAULT_SETTINGS.noiseSuppression),
     startWithVideo: bool(saved.startWithVideo, DEFAULT_SETTINGS.startWithVideo),
     ringSound: bool(saved.ringSound, DEFAULT_SETTINGS.ringSound),
+    ringtone: RINGTONE_IDS.includes(saved.ringtone as RingtoneId) ? (saved.ringtone as RingtoneId) : DEFAULT_SETTINGS.ringtone,
   };
 }
 
