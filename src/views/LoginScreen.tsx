@@ -47,8 +47,8 @@ export function LoginScreen({
   const verifying = useRef(false);
 
   useEffect(() => {
-    // Google doesn't allow its sign-in inside an app's embedded browser.
-    void authApi.providers().then((p) => setGoogle(p.google && !isNativeApp));
+    // The app uses Android's Google account sheet; Google doesn't allow its web sign-in inside apps.
+    void authApi.providers().then((p) => setGoogle(authApi.googleAvailable(p)));
   }, []);
 
   useEffect(() => {
@@ -106,7 +106,10 @@ export function LoginScreen({
     setBusy(true);
     setError(null);
     try {
-      await authApi.signInWithGoogle(); // leaves the page for Google
+      // The website leaves for Google here; the app gets the session back (or null if closed).
+      const session = await authApi.signInWithGoogle();
+      if (session) return onSignedIn(session);
+      if (isNativeApp) setBusy(false);
     } catch (err) {
       setError(problem(err, 'Google sign-in failed. Please try again.'));
       setBusy(false);

@@ -1,5 +1,7 @@
+import { registerPlugin } from '@capacitor/core';
 import type { AuthError as SupabaseAuthError, User } from '@supabase/supabase-js';
 import { brand } from '../branding/brand.config';
+import { isNativeApp } from '../lib/platform';
 import { SUPABASE_KEY, SUPABASE_URL, supabase } from '../lib/supabase';
 
 /*
@@ -26,6 +28,20 @@ export interface Session {
 export interface Providers {
   google: boolean;
 }
+
+/**
+ * The Google Cloud "Web application" OAuth client ID that Supabase's Google
+ * provider uses (Supabase → Authentication → Providers → Google → Client ID).
+ * The Android app asks Google for a sign-in token for this client; it's public.
+ * Empty: the app shows only email sign-in.
+ */
+export const GOOGLE_WEB_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID ?? '';
+
+/** Android's own Google account sheet (android/…/GoogleAuthPlugin.java). */
+const GoogleAuth = registerPlugin<{ signIn(options: { serverClientId: string; nonce: string }): Promise<{ idToken: string }> }>('GoogleAuth');
+
+const sha256Hex = async (s: string) =>
+  Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))), (b) => b.toString(16).padStart(2, '0')).join('');
 
 /** Digits in an emailed sign-in code. Must match Supabase → Auth → Providers → Email → "Email OTP Length". */
 export const CODE_LENGTH = 6;
@@ -186,9 +202,32 @@ export const authApi = {
     return toSession(data.user);
   },
 
-  signInWithGoogle: async () => {
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: appUrl() } });
-    if (error) throw friendly(error);
+  /** Whether "Continue with Google" can be offered here (in the app, it needs the web client ID). */
+  googleAvailable: (providers: Providers) => providers.google && (!isNativeApp || !!GOOGLE_WEB_CLIENT_ID),
+
+  /**
+   * The website leaves for Google's page and comes back signed in (resolves
+   * null meanwhile). The app signs in with Android's Google account sheet
+   * and resolves the session; null if the person closed the sheet.
+   */
+  signInWithGoogle: async (): Promise<Session | null> => {
+    if (!isNativeApp) {
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: appUrl() } });
+      if (error) throw friendly(error);
+      return null;
+    }
+    // The nonce ties Google's token to this sign-in: Google gets its hash, Supabase checks the original.
+    const nonce = crypto.randomUUID();
+    let idToken: string;
+    try {
+      ({ idToken } = await GoogleAuth.signIn({ serverClientId: GOOGLE_WEB_CLIENT_ID, nonce: await sha256Hex(nonce) }));
+    } catch (err) {
+      if ((err as { code?: string }).code === 'cancelled') return null;
+      throw new AuthError(err instanceof Error && err.message ? err.message : 'Google sign-in failed. Please try again.', 400);
+    }
+    const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken, nonce });
+    if (error || !data.user) throw friendly(error);
+    return toSession(data.user);
   },
 
   /**
