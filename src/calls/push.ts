@@ -1,4 +1,6 @@
+import { isNativeApp } from '../lib/platform';
 import { supabase, SUPABASE_URL } from '../lib/supabase';
+import { cancelNativeCall, disableNativePush, enableNativePush, nativePushState, onNativeAction, syncNativePush } from './nativePush';
 
 /*
  * Web Push for incoming calls: lets a call ring this browser (as a system
@@ -6,6 +8,8 @@ import { supabase, SUPABASE_URL } from '../lib/supabase';
  * (public/sw.js) shows the notification; the call-push Edge Function sends it.
  *
  * iPhone and iPad only allow it once Add Call is added to the Home Screen.
+ * The Android app uses Firebase instead (nativePush.ts), behind the same
+ * functions.
  */
 
 export type PushState =
@@ -45,6 +49,7 @@ export function registerWorker(): Promise<ServiceWorkerRegistration | null> {
 }
 
 export async function pushState(): Promise<PushState> {
+  if (isNativeApp) return nativePushState();
   if (!pushSupported()) return isIos() && !isStandalone() ? 'needs-install' : 'unsupported';
   if (Notification.permission === 'denied') return 'denied';
   const reg = await registerWorker();
@@ -73,6 +78,7 @@ async function save(sub: PushSubscription) {
 
 /** Asks for permission (must follow a tap) and saves this browser's subscription. */
 export async function enablePush(): Promise<PushState> {
+  if (isNativeApp) return enableNativePush();
   if (!pushSupported()) return pushState();
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return permission === 'denied' ? 'denied' : 'off';
@@ -96,6 +102,7 @@ export async function enablePush(): Promise<PushState> {
  * without asking; turning notifications off in Settings removes it.
  */
 export async function disablePush({ keepBrowser = false } = {}): Promise<void> {
+  if (isNativeApp) return disableNativePush({ keepDevice: keepBrowser });
   const reg = pushSupported() ? await registerWorker() : null;
   const sub = await reg?.pushManager.getSubscription();
   if (!sub) return;
@@ -105,6 +112,7 @@ export async function disablePush({ keepBrowser = false } = {}): Promise<void> {
 
 /** After sign-in: re-saves an existing subscription, so it belongs to whoever is signed in now. */
 export async function syncPush(): Promise<void> {
+  if (isNativeApp) return syncNativePush();
   if (!pushSupported() || Notification.permission !== 'granted') return;
   const reg = await registerWorker();
   const sub = await reg?.pushManager.getSubscription();
@@ -123,6 +131,7 @@ export function takeLaunchAction(): LaunchAction | null {
 
 /** Listens for Answer / Decline taps relayed by the service worker. */
 export function onWorkerMessage(fn: (m: WorkerMessage) => void): () => void {
+  if (isNativeApp) return onNativeAction((m) => (!m.callId || UUID.test(m.callId)) && (!m.conversationId || UUID.test(m.conversationId)) && fn(m));
   if (!('serviceWorker' in navigator)) return () => {};
   const handler = (e: MessageEvent) => {
     const m = e.data as WorkerMessage | null;
@@ -135,6 +144,7 @@ export function onWorkerMessage(fn: (m: WorkerMessage) => void): () => void {
 
 /** Closes the service worker's notification for a call answered or ended in this tab. */
 export function closeCallNotification(callId: string): void {
+  if (isNativeApp) return cancelNativeCall(callId);
   void registerWorker().then(async (reg) => {
     for (const n of (await reg?.getNotifications({ tag: `call-${callId}` })) ?? []) n.close();
   });

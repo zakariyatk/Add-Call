@@ -66,6 +66,9 @@ Signing** when asked.
 - **News app**: No. **Health**: No. **Financial features**: none.
 - **Government app**: No.
 - **Data safety** (see below).
+- **Full-screen intent** (asked because the app shows incoming calls full
+  screen): choose *Calling and video calling*, and add a short screen
+  recording of an incoming call ringing on a locked phone.
 - **Account deletion**: in-app deletion available; URL
   https://call.adddots.com/delete-account
 
@@ -87,8 +90,9 @@ Signing** when asked.
 | Files and docs | Yes | Optional | App functionality (files in chats) |
 | Messages → Other in-app messages | Yes | Optional | App functionality |
 | App activity → Other user-generated content | Yes | Optional | App functionality, Fraud prevention, security and compliance (reports) |
+| Device or other IDs | Yes | Optional | App functionality (the phone's notification token, to ring it) |
 | App info and performance | No | | |
-| Location, Contacts (phone), Financial, Health, Web history, Device IDs | No | | |
+| Location, Contacts (phone), Financial, Health, Web history | No | | |
 
 Call audio and video pass through LiveKit to the other person and are not
 stored, so they aren't "collected".

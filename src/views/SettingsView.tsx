@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { Session } from '../auth/api';
 import type { ConnectionStatus } from '../calls/CallController';
 import { disablePush, enablePush, pushState, type PushState } from '../calls/push';
+import { canShowFullScreen, openFullScreenSettings } from '../calls/nativePush';
+import { isNativeApp } from '../lib/platform';
 import { brand, type ThemeMode } from '../branding/brand.config';
 import { Icon } from '../components/Icon';
 import { UsernameForm } from '../components/UsernameField';
@@ -415,22 +417,57 @@ function CallNotifications() {
 
   const hint =
     state === 'denied'
-      ? `Blocked. Allow notifications for this site in your browser's settings.`
+      ? isNativeApp
+        ? `Turned off. Allow notifications for ${brand.name} in your phone's Settings → Apps → ${brand.name}.`
+        : `Blocked. Allow notifications for this site in your browser's settings.`
       : state === 'needs-install'
         ? `On iPhone and iPad, first add ${brand.name} to your Home Screen (Share → Add to Home Screen), then open it from there.`
         : state === 'unsupported'
-          ? `This browser can't show call notifications.`
+          ? isNativeApp
+            ? `Not available in this version of the app.`
+            : `This browser can't show call notifications.`
           : busy
             ? 'Updating…'
-            : `Ring this device for calls and messages, even when ${brand.name} is closed.`;
+            : `Ring this ${isNativeApp ? 'phone' : 'device'} for calls and messages, even when ${brand.name} is closed.`;
   return (
-    <Switch
-      label="Call notifications"
-      hint={error ?? hint}
-      checked={state === 'on'}
-      disabled={busy || (state !== 'on' && state !== 'off')}
-      onChange={(on) => void (on ? run(enablePush) : run(() => disablePush(), 'off'))}
-    />
+    <>
+      <Switch
+        label="Call notifications"
+        hint={error ?? hint}
+        checked={state === 'on'}
+        disabled={busy || (state !== 'on' && state !== 'off')}
+        onChange={(on) => void (on ? run(enablePush) : run(() => disablePush(), 'off'))}
+      />
+      {isNativeApp && state === 'on' && <FullScreenCalls />}
+    </>
+  );
+}
+
+/** Android 14+ asks people to allow the incoming-call screen over a locked phone. */
+function FullScreenCalls() {
+  const [allowed, setAllowed] = useState(true);
+  useEffect(() => {
+    let live = true;
+    const check = () => void canShowFullScreen().then((ok) => live && setAllowed(ok));
+    check();
+    // Coming back from the phone's settings.
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      live = false;
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, []);
+  if (allowed) return null;
+  return (
+    <div className="setting-row">
+      <span>
+        <span className="setting-label">Incoming call screen</span>
+        <span className="setting-hint">Allow {brand.name} to show calls full screen when your phone is locked.</span>
+      </span>
+      <button type="button" className="btn btn-secondary" onClick={() => void openFullScreenSettings()}>
+        Allow
+      </button>
+    </div>
   );
 }
 
