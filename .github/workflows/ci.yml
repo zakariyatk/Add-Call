@@ -26,6 +26,33 @@ jobs:
           path: dist
           retention-days: 7
 
+  # Builds the Android app (debug, unsigned for Play), so native code that
+  # doesn't compile is caught here. Without google-services.json the app
+  # builds without Firebase; call notifications then report "not available".
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Build the app
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: add-call-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+
   # Uploads the built app to Hostinger (call.adddots.com) after every push to main.
   # Pushes to other branches do a dry run: they log in over FTP and list what
   # would change, without touching the site (a quick check that the secrets work).

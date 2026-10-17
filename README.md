@@ -260,6 +260,28 @@ codes, so a review account also accepts one fixed code:
 A wrong review code counts against a limit of 20 an hour, so it can't be
 guessed. Other accounts aren't affected.
 
+### 10. Ring the Android app when it's closed (Firebase)
+
+1. In the [Firebase console](https://console.firebase.google.com), **Add
+   project** (Google Analytics is optional), then **Add app → Android** with
+   package name `com.adddots.call`. Download **`google-services.json`** and put
+   it in `android/app/` (it's safe to commit: it only names the project).
+2. **Project settings → Service accounts → Generate new private key**. In
+   Supabase → **Edge Functions → Secrets**, add `FCM_SERVICE_ACCOUNT` with the
+   whole JSON file as its value. Keep the file itself private and delete it
+   afterwards.
+3. Apply [`20261019090000_android_push.sql`](supabase/migrations/20261019090000_android_push.sql)
+   (SQL Editor → paste → Run) and deploy `call-push` again
+   (`supabase functions deploy call-push --no-verify-jwt`).
+4. Build the app again (`npm run android`).
+
+The app asks for notification permission at the first sign-in and then rings
+like a phone call: full screen on a locked phone, with **Answer** and
+**Decline**, until it's answered, declined or 40 seconds pass. Missed calls and
+messages show as notifications. On Android 14 and later, people allow the full
+screen call in Settings → Calling → Incoming call screen (Google Play grants it
+to calling apps, declared in Play Console → App content → Full-screen intent).
+
 ## Android app
 
 The same app, wrapped with [Capacitor](https://capacitorjs.com) (`android/`,
@@ -279,8 +301,8 @@ emulator) and press **Run**. After changing the web code, run
 `npm run android:sync` and press Run again. `npm run icons` also refreshes the
 launcher icons.
 
-Calls ring while the app is open. Ringing when it's closed (full-screen
-incoming call) needs Firebase Cloud Messaging; that's the next step.
+Calls ring while the app is open, and when it's closed once Firebase is set
+up (Set up → 10).
 
 ### Release build for Google Play
 
@@ -401,7 +423,7 @@ src/
 supabase/
   migrations/          tables, row-level security, call functions, Realtime rules
   functions/livekit-token/  Edge Function: LiveKit passes for accepted calls
-  functions/call-push/      Edge Function: Web Push for calls and messages
+  functions/call-push/      Edge Function: Web Push and FCM (Android) for calls and messages
   functions/delete-account/ Edge Function: deletes the signed-in account, its files and chats
   functions/demo-sign-in/   Edge Function: fixed code for app store reviewers' accounts
   templates/           branded auth emails (generated)
@@ -417,7 +439,7 @@ scripts/               generate-icons.ts, generate-email-templates.ts
 - Change email address.
 - Sign in with Apple; two-factor authentication.
 - Google Play release of the Android app (see
-  [docs/PLAY_STORE.md](docs/PLAY_STORE.md)), then ringing when the Android app
-  is closed (Firebase Cloud Messaging, full-screen incoming call).
+  [docs/PLAY_STORE.md](docs/PLAY_STORE.md)).
+- Android: native Google sign-in, and emailed sign-in links that open the app.
 - Group calls (LiveKit rooms already support more than two people).
 - iOS app (later).

@@ -9,6 +9,9 @@
 //        It has no session, so it proves itself with the token that came in
 //        the push (an HMAC of the call id only this function can make).
 //
+// Every push goes to the person's browsers (Web Push) and to their Android
+// phones (Firebase Cloud Messaging, when FCM_SERVICE_ACCOUNT is set).
+//
 // ring, missed and message check the requester's own JWT and read the call or
 // message with it, so row-level security decides whether they're part of it.
 // Each call is pushed at most once per kind (calls.ring_pushed_at /
@@ -19,6 +22,9 @@
 // Secrets (Supabase dashboard → Edge Functions → Secrets):
 //   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY   (npx web-push generate-vapid-keys)
 //   VAPID_SUBJECT                         optional, e.g. mailto:you@example.com
+//   FCM_SERVICE_ACCOUNT                   optional: the Firebase service account
+//                                         JSON (Project settings → Service accounts),
+//                                         to ring the Android app
 import { createClient } from 'npm:@supabase/supabase-js@2.117.3';
 import webpush from 'npm:web-push@3.6.7';
 
@@ -59,6 +65,56 @@ function sameString(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
+}
+
+// ---------- Firebase Cloud Messaging (the Android app) ----------
+
+interface ServiceAccount {
+  project_id: string;
+  client_email: string;
+  private_key: string;
+}
+
+function serviceAccount(): ServiceAccount | null {
+  const raw = Deno.env.get('FCM_SERVICE_ACCOUNT');
+  if (!raw) return null;
+  try {
+    const sa = JSON.parse(raw) as Partial<ServiceAccount>;
+    if (sa.project_id && sa.client_email && sa.private_key) return sa as ServiceAccount;
+  } catch {
+    /* reported below */
+  }
+  console.warn('[call-push] FCM_SERVICE_ACCOUNT is not a service account JSON');
+  return null;
+}
+
+let fcmAccess: { token: string; until: number } | null = null;
+
+/** An OAuth access token for FCM, from the service account (cached for its hour). */
+async function fcmAccessToken(sa: ServiceAccount): Promise<string> {
+  if (fcmAccess && fcmAccess.until > Date.now() + 60_000) return fcmAccess.token;
+  const now = Math.floor(Date.now() / 1000);
+  const part = (o: unknown) => b64url(new TextEncoder().encode(JSON.stringify(o)).buffer);
+  const unsigned = `${part({ alg: 'RS256', typ: 'JWT' })}.${part({
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/firebase.messaging',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600,
+  })}`;
+  const pem = sa.private_key.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+  const der = Uint8Array.from(atob(pem), (c) => c.charCodeAt(0));
+  const key = await crypto.subtle.importKey('pkcs8', der, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned));
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${unsigned}.${b64url(signature)}` }),
+  });
+  const json = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number };
+  if (!res.ok || !json.access_token) throw new Error(`FCM sign-in failed (${res.status})`);
+  fcmAccess = { token: json.access_token, until: Date.now() + (json.expires_in ?? 3600) * 1000 };
+  return fcmAccess.token;
 }
 
 interface MessageRow {
@@ -121,10 +177,48 @@ Deno.serve(async (req) => {
   const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
   webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT') ?? 'https://call.adddots.com', publicKey, privateKey);
 
-  /** Sends one payload to every browser of a person; forgets the ones that are gone. */
-  const pushTo = async (userId: string, payload: string, options: { TTL: number; urgency: 'high'; topic: string }) => {
-    const { data: subs } = await admin.from('push_subscriptions').select('endpoint, p256dh, auth').eq('user_id', userId);
+  /** Sends one payload to every Android phone of a person (FCM data message); forgets the ones that are gone. */
+  const fcmTo = async (userId: string, payload: Record<string, unknown>, ttlSeconds: number, collapseKey: string) => {
+    const sa = serviceAccount();
+    if (!sa) return 0;
+    const { data: rows } = await admin.from('fcm_tokens').select('token').eq('user_id', userId);
+    if (!rows?.length) return 0;
+    let access: string;
+    try {
+      access = await fcmAccessToken(sa);
+    } catch (err) {
+      console.warn('[call-push]', (err as Error).message);
+      return 0;
+    }
+    // FCM data values must be strings; the app reads them as such.
+    const data = Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, String(v)]));
     let sent = 0;
+    await Promise.all(
+      rows.map(async ({ token }: { token: string }) => {
+        const res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${access}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: { token, data, android: { priority: 'HIGH', ttl: `${ttlSeconds}s`, collapse_key: collapseKey } } }),
+        });
+        if (res.ok) return void sent++;
+        const err = (await res.json().catch(() => ({}))) as { error?: { message?: string; details?: { errorCode?: string }[] } };
+        const code = err.error?.details?.find((d) => d.errorCode)?.errorCode;
+        // The app was uninstalled or its token replaced: forget it.
+        if (res.status === 404 || code === 'UNREGISTERED') await admin.from('fcm_tokens').delete().eq('token', token);
+        else console.warn('[call-push] FCM', res.status, code ?? '', err.error?.message ?? '');
+      }),
+    );
+    return sent;
+  };
+
+  /** Sends one payload to every browser and phone of a person; forgets the ones that are gone. */
+  const pushTo = async (userId: string, message: Record<string, unknown>, options: { TTL: number; urgency: 'high'; topic: string }) => {
+    const payload = JSON.stringify(message);
+    const [{ data: subs }, phones] = await Promise.all([
+      admin.from('push_subscriptions').select('endpoint, p256dh, auth').eq('user_id', userId),
+      fcmTo(userId, message, options.TTL, options.topic),
+    ]);
+    let sent = phones;
     await Promise.all(
       (subs ?? []).map(async (s) => {
         try {
@@ -162,14 +256,14 @@ Deno.serve(async (req) => {
     const { data: claimed } = await admin.from('messages').update({ pushed_at: new Date().toISOString() }).eq('id', messageId).is('pushed_at', null).select('id');
     if (!claimed?.length) return reply(200, { sent: 0 });
     const { data: sender } = await admin.from('profiles').select('name, email').eq('id', msg.sender_id).maybeSingle<{ name: string; email: string }>();
-    const payload = JSON.stringify({
+    const payload = {
       type: 'message',
       conversationId: msg.conversation_id,
       messageId: msg.id,
       name: sender?.name || sender?.email || 'New message',
       email: sender?.email ?? '',
       preview: messagePreview(msg),
-    });
+    };
     // Messages wait up to a day for a phone that's switched off.
     const sent = await pushTo(msg.recipient_id, payload, { TTL: 24 * 3600, urgency: 'high', topic: msg.conversation_id.replace(/-/g, '') });
     return reply(200, { sent });
@@ -215,7 +309,7 @@ Deno.serve(async (req) => {
     .select('id');
   if (!claimed?.length) return reply(200, { sent: 0 });
 
-  const payload = JSON.stringify(
+  const payload =
     action === 'ring'
       ? {
           type: 'incoming',
@@ -227,8 +321,7 @@ Deno.serve(async (req) => {
           declineToken: await declineToken(callId, privateKey),
           declineUrl: `${url}/functions/v1/call-push`,
         }
-      : { type: 'missed', callId, name: call.caller_name, email: call.caller_email, video: call.video },
-  );
+      : { type: 'missed', callId, name: call.caller_name, email: call.caller_email, video: call.video };
   const options = {
     TTL: action === 'ring' ? Math.max(1, Math.round((RING_WINDOW_MS - (now - Date.parse(call.created_at))) / 1000)) : 24 * 3600,
     urgency: 'high' as const,
