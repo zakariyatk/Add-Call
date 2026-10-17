@@ -36,14 +36,17 @@ Signing** when asked.
 
 **Grow → Store presence → Main store listing**
 
+The text and images are ready in **[docs/store](store/LISTING.md)**: copy
+the text from `LISTING.md` and upload the PNGs next to it.
+
 | Field | Value |
 | --- | --- |
 | App name | Add Call |
-| Short description (80) | Voice and video calls and chat with the people you add. |
-| Full description | What it does: calls, video calls, chats with photos, files, voice messages and stickers, @usernames, your list, block and report. No ads. |
-| App icon | 512 × 512 PNG: `public/icons/icon-512.png` |
-| Feature graphic | 1024 × 500 PNG |
-| Phone screenshots | At least 2 (chats, a call, People) |
+| Short description (80) | Voice and video calls and chat with the people you add. No phone number needed. |
+| Full description | In `docs/store/LISTING.md` |
+| App icon | `docs/store/app-icon-512.png` (512 × 512) |
+| Feature graphic | `docs/store/feature-graphic.png` (1024 × 500) |
+| Phone screenshots | `docs/store/screenshot-1.png` … `screenshot-4.png` (1080 × 1920) |
 | Category | Communication |
 | Contact email | `support@adddots.com` (the `supportEmail` in the branding config) |
 | Website | https://call.adddots.com |
