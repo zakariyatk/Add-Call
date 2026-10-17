@@ -2743,9 +2743,6 @@ video {
   font-size: 13px;
   text-decoration: none;
 }
-.online-label {
-  margin-top: 24px;
-}
 .btn-small {
   min-height: 38px;
   padding: 0 12px;
@@ -3256,4 +3253,141 @@ video {
   .install-sheet {
     animation: none;
   }
+}
+
+/* ---------- privacy and safety: blocking, reports, deleting the account ---------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.btn-danger-fill {
+  background: var(--danger);
+  color: var(--danger-ink);
+}
+@media (hover: hover) {
+  .btn-danger-fill:hover {
+    opacity: 0.92;
+  }
+}
+.login-legal {
+  justify-self: center;
+  max-width: 34ch;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.login-legal a {
+  color: inherit;
+}
+
+.thread-blocked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 14px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  font-size: 13.5px;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.report-sheet {
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+}
+.report-sheet form {
+  display: grid;
+  gap: 12px;
+  padding: 0 8px 4px;
+}
+.report-intro {
+  font-size: 13.5px;
+  text-align: center;
+}
+.report-reasons {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.report-reason,
+.report-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.report-reason input,
+.report-block input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+.report-details textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--surface);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 400;
+  resize: vertical;
+}
+.report-details textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.report-actions,
+.delete-account-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.report-done {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 20px 16px 8px;
+  text-align: center;
+}
+.report-done-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.report-done-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.blocked-list {
+  margin: 0 0 8px;
+}
+.delete-account {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  margin: 6px 0 4px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
+  border-radius: calc(var(--radius) - 4px);
 }

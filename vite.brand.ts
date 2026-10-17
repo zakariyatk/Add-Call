@@ -1,12 +1,14 @@
 import type { Plugin } from 'vite';
 import { brand, type BrandConfig } from './src/branding/brand.config';
+import { deleteAccountPage, privacyPage } from './src/branding/legal';
 import { logoSvg } from './src/branding/logo';
 import { themeCss } from './src/branding/theme';
 
 /*
  * Applies src/branding/brand.config.ts to everything outside the React app:
- * <title>, meta tags, theme-color, inlined colour tokens, the SVG favicon and
- * the web app manifest. Generated files are served in dev and emitted at build,
+ * <title>, meta tags, theme-color, inlined colour tokens, the SVG favicon, the
+ * web app manifest, and the privacy policy and account deletion pages
+ * (served at /privacy and /delete-account). Generated files are served in dev and emitted at build,
  * so they can never drift from the config.
  */
 
@@ -63,6 +65,8 @@ export function generatedFiles(b: BrandConfig): Record<string, { body: string; t
   return {
     'favicon.svg': { body: logoSvg(b, { adaptive: true, title: b.name }), type: 'image/svg+xml' },
     'manifest.webmanifest': { body: JSON.stringify(manifest(b), null, 2), type: 'application/manifest+json' },
+    'privacy.html': { body: privacyPage(b), type: 'text/html; charset=utf-8' },
+    'delete-account.html': { body: deleteAccountPage(b), type: 'text/html; charset=utf-8' },
   };
 }
 
@@ -75,7 +79,10 @@ export function brandPlugin(b: BrandConfig = brand): Plugin {
     },
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        const file = generatedFiles(b)[(req.url ?? '').split('?')[0].replace(/^\//, '')];
+        const path = (req.url ?? '').split('?')[0].replace(/^\//, '').replace(/\/$/, '');
+        // /privacy and /delete-account, as on the live site (see public/.htaccess).
+        const files = generatedFiles(b);
+        const file = files[path] ?? files[`${path}.html`];
         if (!file) return next();
         res.setHeader('Content-Type', file.type);
         res.end(file.body);

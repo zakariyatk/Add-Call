@@ -24,6 +24,7 @@ import { ChatsView } from './views/ChatsView';
 import { useChat } from './chat/useChat';
 import { resetAvatars } from './profile/avatars';
 import { findPerson, loadMyProfile } from './profile/username';
+import { useBlocks } from './people/blocks';
 import { useContacts } from './people/contacts';
 import { isEmail } from './calls/protocol';
 import { ChooseUsernameScreen } from './views/ChooseUsernameScreen';
@@ -141,7 +142,7 @@ export default function App() {
   // Messages only push to people who aren't in the app right now.
   const presence = calling.presence;
   useEffect(() => {
-    chatController.setOnlineLookup((email) => presence.some((p) => p.email === email));
+    chatController.setOnlineLookup((id) => presence.some((p) => p.id === id));
   }, [chatController, presence]);
   useEffect(() => {
     chatController.setActive(view === 'chats' ? chatId : null);
@@ -166,6 +167,7 @@ export default function App() {
     };
   }, [signedInId, myEmail]);
   const contacts = useContacts(signedInId);
+  const blocks = useBlocks(signedInId);
 
   // Call notifications: the service worker rings this browser even with no tab
   // open; its Answer / Decline buttons come back here.
@@ -297,6 +299,19 @@ export default function App() {
     setSignedOutNotice(null);
     enter(null);
   };
+  /** Deletes the account for good (Settings → Account); throws if it couldn't. */
+  const deleteAccount = async () => {
+    signingOut.current = true;
+    try {
+      await authApi.deleteAccount();
+    } catch (err) {
+      signingOut.current = false;
+      throw err;
+    }
+    controller.disconnect();
+    setSignedOutNotice('Your account and everything in it were deleted.');
+    enter(null);
+  };
 
   return (
     <>
@@ -323,14 +338,15 @@ export default function App() {
             chat={chat}
             chatId={chatId}
             now={now}
-            presenceOf={(email) => {
-              const p = presence.find((x) => x.email === email);
+            presenceOf={(id) => {
+              const p = presence.find((x) => x.id === id);
               return p ? (p.busy ? 'busy' : 'online') : 'offline';
             }}
             onOpen={(id) => navigate('chats', id)}
             onBack={() => navigate('chats')}
             onStart={startChat}
             isContact={contacts.isContact}
+            isBlocked={blocks.isBlocked}
             onCall={startCall}
           />
         )}
@@ -341,7 +357,6 @@ export default function App() {
             presence={calling.presence}
             contacts={contacts.contacts}
             contactsLoaded={contacts.loaded}
-            connection={connection}
             onCall={startCall}
             onMessage={(p) => void startChat(p.email)}
           />
@@ -355,6 +370,8 @@ export default function App() {
             connection={connection}
             username={myUsername || null}
             onUsername={setMyUsername}
+            blocked={blocks.blocked}
+            onDeleteAccount={deleteAccount}
           />
         )}
       </AppShell>

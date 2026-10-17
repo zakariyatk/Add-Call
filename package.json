@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "icons": "vite-node scripts/generate-icons.ts",
     "android": "npm run build && cap sync android && cap open android",
-    "android:sync": "npm run build && cap sync android"
+    "android:sync": "npm run build && cap sync android",
+    "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",

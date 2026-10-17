@@ -1,7 +1,8 @@
 # Add Call
 
-**Calls, simply added.** Add Call is a web calling app: create an account, see
-who's online, and make **voice and video calls** in the browser.
+**Calls, simply added.** Add Call is a calling app for the web and Android:
+create an account, find people by @username, and make **voice and video
+calls** and chat.
 
 Live at **https://call.adddots.com**.
 
@@ -23,8 +24,9 @@ There is no server of our own to run.
   whichever device opens it. Or **Continue with Google**.
 - **Calls**: audio and video go through LiveKit, so calls connect even behind
   strict firewalls and mobile networks. Media is encrypted in transit.
-- **People**: everyone signed in right now, with presence ("On a call"), plus a
-  box to call anyone on Add Call by their email address.
+- **People**: find anyone on Add Call by their exact @username (or email) and
+  call, message or add them to your list, which shows who's online or on a
+  call. There's no list of everyone who's signed in.
 - **Incoming calls**: full-screen ring with Accept, Accept with video and
   Decline, plus a ringtone (can be turned off). It rings in every tab and
   device you're signed in on; answering on one stops the others. With
@@ -72,7 +74,17 @@ There is no server of our own to run.
 - **Recents**: your call history (incoming, outgoing, missed, video, duration),
   kept per account in this browser, with call-back.
 - **Settings**: theme, noise suppression, start calls with video, ring sound,
-  and connection status.
+  connection status, blocked people, the privacy policy, and **Delete
+  account**.
+- **Block and report**: in a chat, ⋮ → **Block** stops calls and messages both
+  ways (and takes them off your list), until you unblock them (there or in
+  Settings → Privacy and safety). ⋮ → **Report**, or press and hold one of their
+  messages → **Report**, sends a report with a reason to the team, with the
+  option to block at the same time. They're never told.
+- **Privacy policy and account deletion pages** at
+  [/privacy](https://call.adddots.com/privacy) and
+  [/delete-account](https://call.adddots.com/delete-account), generated from the
+  branding config (`src/branding/legal.ts`). Google Play asks for both links.
 - Light and dark themes, responsive (sidebar on desktop, tab bar on phones),
   keyboard and screen-reader friendly.
 
@@ -211,6 +223,43 @@ Apply [`20261017090000_stickers.sql`](supabase/migrations/20261017090000_sticker
 (SQL Editor → paste → Run) and redeploy `call-push` (so notifications say
 "Sticker").
 
+### 9. Block, report, delete account (needed for Google Play)
+
+1. Apply [`20261018090000_safety.sql`](supabase/migrations/20261018090000_safety.sql)
+   (SQL Editor → paste → Run).
+2. Deploy the new functions, and `call-push` again (it now also answers the
+   Android app):
+   ```bash
+   supabase functions deploy delete-account
+   supabase functions deploy demo-sign-in --no-verify-jwt
+   supabase functions deploy call-push --no-verify-jwt
+   ```
+3. Create the mailbox in `supportEmail` in
+   [`brand.config.ts`](src/branding/brand.config.ts) (`support@adddots.com`;
+   hPanel → Emails), or change it to an address you read. The privacy policy
+   and account deletion pages tell people to write there.
+4. **Reports** arrive in Supabase → **Table Editor → reports** (newest open
+   ones first with a filter on `status = open`). Each has the reason, details
+   and, for a reported message, a copy of it. Set `status` to `reviewed`,
+   `actioned` or `dismissed` and keep notes in `notes`. To remove someone's
+   account, delete their user under **Authentication → Users**: their rows go
+   with it, while files they uploaded stay in **Storage** until you delete
+   them there.
+
+**Sign-in for app reviewers.** Google Play's reviewers can't read emailed
+codes, so a review account also accepts one fixed code:
+
+1. Make a review account: sign in once, normally, with an address you own
+   (for example a `+review` alias of your Gmail), and choose a username.
+2. In Supabase → **Edge Functions → Secrets**, add `DEMO_EMAILS` (that address;
+   several can be separated with commas) and `DEMO_CODE` (6 random digits used
+   nowhere else).
+3. In Play Console → **App content → App access**, give reviewers the address
+   and the code: "Enter the email, tap Send code, then type this code."
+
+A wrong review code counts against a limit of 20 an hour, so it can't be
+guessed. Other accounts aren't affected.
+
 ## Android app
 
 The same app, wrapped with [Capacitor](https://capacitorjs.com) (`android/`,
@@ -233,6 +282,38 @@ launcher icons.
 Calls ring while the app is open. Ringing when it's closed (full-screen
 incoming call) needs Firebase Cloud Messaging; that's the next step.
 
+### Release build for Google Play
+
+Google Play takes an **.aab** file signed with your **upload key**. Make the
+key once and keep it safe, with its passwords, outside the repository (a
+password manager and a backup). With Play App Signing, Google holds the final
+signing key, and a lost upload key can be replaced through Play Console
+support.
+
+```bash
+keytool -genkeypair -v -keystore android/add-call-upload.jks -alias upload \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Then create `android/keystore.properties` (ignored by git, like the `.jks`):
+
+```properties
+storeFile=add-call-upload.jks
+storePassword=the store password
+keyAlias=upload
+keyPassword=the key password
+```
+
+and build:
+
+```bash
+npm run android:bundle   # → android/app/build/outputs/bundle/release/app-release.aab
+```
+
+Before each upload, raise `versionCode` (and `versionName`) in
+[`android/app/build.gradle`](android/app/build.gradle). The whole Play Store
+checklist is in **[docs/PLAY_STORE.md](docs/PLAY_STORE.md)**.
+
 ## Security model and limits
 
 **Accounts** (Supabase Auth)
@@ -248,11 +329,19 @@ incoming call) needs Firebase Cloud Messaging; that's the next step.
   write the table directly: calls are started, answered and ended only through
   database functions that check who is asking. The caller can't answer their
   own call, and people can place at most 10 calls a minute.
-- Other accounts can only be found by their exact email (`find_user`), so the
-  member list can't be downloaded.
+- Other accounts can only be found by their exact @username or email
+  (`find_person`), so the member list can't be downloaded.
 - "Who's online" is a private Realtime channel that only signed-in users can
-  join. Everyone signed in sees who else is online (name and email). That's
-  fine for a team; add contacts or permissions for a public service.
+  join. It carries only account ids and an "on a call" flag, never names or
+  emails; the app matches ids to people you already know (your list, your
+  chats).
+- Blocking is enforced in the database (a trigger on `calls` and `messages`),
+  both ways, whichever function inserts the row. Reports can't be read through
+  the API at all; only the dashboard sees them.
+- Deleting an account (`delete-account` function) removes its Storage files
+  (picture, and every file in its chats) and then the user; the database
+  removes the rest through cascading foreign keys. Reports about the person
+  are kept, with their email copied in.
 - LiveKit passes are issued only for accepted calls, only to their two
   participants, and only for that call's room.
 - Push subscriptions can't be read or listed by anyone but the `call-push`
@@ -306,12 +395,15 @@ src/
     history.ts, ringtone.ts, useCalling.ts
   auth/api.ts          accounts, on Supabase Auth
   lib/supabase.ts      Supabase client
-  branding/            brand.config.ts (edit this), logo.ts, theme.ts
+  branding/            brand.config.ts (edit this), logo.ts, theme.ts, legal.ts (privacy / delete-account pages)
+  people/              contacts.ts (my list), blocks.ts (block, report)
   components/, views/  UI (Chats, People, Calls, Settings, call screen, sign-in)
 supabase/
   migrations/          tables, row-level security, call functions, Realtime rules
   functions/livekit-token/  Edge Function: LiveKit passes for accepted calls
   functions/call-push/      Edge Function: Web Push for calls and messages
+  functions/delete-account/ Edge Function: deletes the signed-in account, its files and chats
+  functions/demo-sign-in/   Edge Function: fixed code for app store reviewers' accounts
   templates/           branded auth emails (generated)
 public/.htaccess       Hostinger: HTTPS, caching, security headers
 public/sw.js           service worker: shows pushed calls (no caching)
@@ -324,7 +416,8 @@ scripts/               generate-icons.ts, generate-email-templates.ts
 - Load Recents from the `calls` table, so history follows you across devices.
 - Change email address.
 - Sign in with Apple; two-factor authentication.
-- Push notifications for incoming calls when the tab is closed.
+- Google Play release of the Android app (see
+  [docs/PLAY_STORE.md](docs/PLAY_STORE.md)), then ringing when the Android app
+  is closed (Firebase Cloud Messaging, full-screen incoming call).
 - Group calls (LiveKit rooms already support more than two people).
-- Native Android, iOS and Windows apps are **out of scope for now**; this
-  repository is the web application only.
+- iOS app (later).

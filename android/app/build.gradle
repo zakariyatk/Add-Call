@@ -1,5 +1,19 @@
 apply plugin: 'com.android.application'
 
+// Release signing with the Google Play upload key. Put the details in
+// android/keystore.properties (never committed, see README → Android app):
+//   storeFile=add-call-upload.jks      (relative to android/, or a full path)
+//   storePassword=…
+//   keyAlias=upload
+//   keyPassword=…
+// or in the environment variables ANDROID_STORE_FILE, ANDROID_STORE_PASSWORD,
+// ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD (for automated builds).
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+if (keystoreFile.exists()) keystoreFile.withInputStream { keystoreProps.load(it) }
+def signingValue = { String key, String env -> keystoreProps.getProperty(key) ?: System.getenv(env) }
+def releaseStoreFile = signingValue('storeFile', 'ANDROID_STORE_FILE')
+
 android {
     namespace = "com.adddots.call"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,6 +21,7 @@ android {
         applicationId "com.adddots.call"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        // Raise versionCode for every upload to Google Play (it must always go up).
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -16,8 +31,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseStoreFile) {
+            release {
+                storeFile rootProject.file(releaseStoreFile)
+                storePassword signingValue('storePassword', 'ANDROID_STORE_PASSWORD')
+                keyAlias signingValue('keyAlias', 'ANDROID_KEY_ALIAS')
+                keyPassword signingValue('keyPassword', 'ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (releaseStoreFile) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

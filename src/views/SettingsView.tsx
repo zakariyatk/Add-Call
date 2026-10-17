@@ -8,6 +8,8 @@ import { UsernameForm } from '../components/UsernameField';
 import { AvatarEditor } from '../components/AvatarEditor';
 import { Lockup } from '../components/Logo';
 import { removeAvatar, uploadAvatar, useAvatarUrl } from '../profile/avatars';
+import { unblockUser } from '../people/blocks';
+import { handle, type Person } from '../profile/username';
 import { Avatar, PageHeader, Switch } from '../components/ui';
 import type { Settings } from '../settings';
 
@@ -25,8 +27,14 @@ export function SettingsView({
   connection,
   username,
   onUsername,
+  blocked,
+  onDeleteAccount,
 }: {
   connection: ConnectionStatus;
+  /** People I blocked. */
+  blocked: Person[];
+  /** Deletes the account for good; throws when it couldn't. */
+  onDeleteAccount: () => Promise<void>;
   /** Your @username (without the @). */
   username: string | null;
   onUsername: (u: string) => void;
@@ -55,6 +63,7 @@ export function SettingsView({
           </button>
         </div>
         <UsernameRow session={session} username={username} onUsername={onUsername} />
+        <DeleteAccountRow onDelete={onDeleteAccount} />
       </div>
 
       <div className="card settings-section">
@@ -84,6 +93,20 @@ export function SettingsView({
         <CallNotifications />
       </div>
 
+      <div className="card settings-section">
+        <h2>Privacy and safety</h2>
+        <BlockedPeople blocked={blocked} />
+        <div className="setting-row">
+          <span>
+            <span className="setting-label">Privacy policy</span>
+            <span className="setting-hint">What {brand.name} collects and how it’s used.</span>
+          </span>
+          <a className="btn btn-secondary" href={`${brand.website}/privacy`} target="_blank" rel="noopener noreferrer">
+            Read
+          </a>
+        </div>
+      </div>
+
       <div className="card settings-section about">
         <h2>About {brand.name}</h2>
         <Lockup size={40} />
@@ -96,6 +119,117 @@ export function SettingsView({
         </dl>
       </div>
     </section>
+  );
+}
+
+function BlockedPeople({ blocked }: { blocked: Person[] }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const unblock = async (p: Person) => {
+    setBusy(p.id);
+    setError(null);
+    try {
+      await unblockUser(p.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not unblock this person.');
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <>
+      <div className="setting-row">
+        <span>
+          <span className="setting-label">Blocked people</span>
+          <span className="setting-hint">
+            {blocked.length
+              ? `${blocked.length} ${blocked.length === 1 ? 'person' : 'people'}. People you block can’t call or message you.`
+              : 'No one. Block someone from your chat with them (⋮ → Block).'}
+          </span>
+        </span>
+        {blocked.length > 0 && (
+          <button type="button" className="btn btn-secondary" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            {open ? 'Hide' : 'Show'}
+          </button>
+        )}
+      </div>
+      {open && blocked.length > 0 && (
+        <ul className="list blocked-list">
+          {blocked.map((p) => (
+            <li key={p.id} className="list-row">
+              <Avatar name={p.name} email={p.email} size={36} />
+              <span className="list-main">
+                <span className="list-title">{p.name}</span>
+                <span className="list-sub">{handle(p.username, p.email)}</span>
+              </span>
+              <button type="button" className="btn btn-secondary btn-small" disabled={busy === p.id} onClick={() => void unblock(p)}>
+                {busy === p.id ? 'Unblocking…' : 'Unblock'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Deletes the account, after saying exactly what goes with it. */
+function DeleteAccountRow({ onDelete }: { onDelete: () => Promise<void> }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onDelete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete your account right now. Please try again.');
+      setBusy(false);
+    }
+  };
+  if (!confirming)
+    return (
+      <div className="setting-row">
+        <span>
+          <span className="setting-label">Delete account</span>
+          <span className="setting-hint">Remove your account and everything in it.</span>
+        </span>
+        <button type="button" className="btn btn-secondary btn-danger" onClick={() => setConfirming(true)}>
+          Delete account
+        </button>
+      </div>
+    );
+  return (
+    <div className="delete-account" role="group" aria-labelledby="delete-account-title">
+      <p id="delete-account-title" className="setting-label">
+        Delete your account?
+      </p>
+      <p className="setting-hint">
+        This can’t be undone. Your profile, @username and picture, all your chats (for both people, with their photos, files and voice
+        messages), your call records, your list and the people you blocked are deleted straight away. You can sign up again later with
+        the same email, as a new account.
+      </p>
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
+      <div className="delete-account-actions">
+        <button type="button" className="btn btn-secondary" onClick={() => (setConfirming(false), setError(null))} disabled={busy}>
+          Cancel
+        </button>
+        <button type="button" className="btn btn-danger-fill" onClick={() => void run()} disabled={busy}>
+          {busy ? 'Deleting…' : 'Delete my account'}
+        </button>
+      </div>
+    </div>
   );
 }
 

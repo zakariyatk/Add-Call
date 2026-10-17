@@ -121,6 +121,18 @@ const appUrl = () => window.location.origin + window.location.pathname;
 
 let providersCache: Promise<Providers> | null = null;
 
+/**
+ * App store reviewers can't read the emailed code, so their accounts also
+ * accept a fixed one (functions/demo-sign-in). Asked only after a wrong code;
+ * null for everyone else.
+ */
+async function reviewSignIn(email: string, code: string): Promise<Session | null> {
+  const { data, error } = await supabase.functions.invoke<{ tokenHash?: string }>('demo-sign-in', { body: { email: email.trim(), code } });
+  if (error || !data?.tokenHash) return null;
+  const { data: signedIn, error: verifyError } = await supabase.auth.verifyOtp({ token_hash: data.tokenHash, type: 'email' });
+  return verifyError || !signedIn.user ? null : toSession(signedIn.user);
+}
+
 export const authApi = {
   /** The signed-in user, or null when signed out. */
   async me(): Promise<Session | null> {
@@ -162,10 +174,14 @@ export const authApi = {
     if (error) throw friendly(error);
   },
 
-  /** Signs in with the emailed code. */
+  /** Signs in with the emailed code (or, for the app reviewers' accounts, their fixed code). */
   async verifyCode(email: string, code: string): Promise<Session> {
     const { data, error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code, type: 'email' });
-    if (error?.code === 'otp_expired') throw new AuthError('That code is wrong or has expired. Check the latest email, or send a new code.', 400);
+    if (error?.code === 'otp_expired') {
+      const review = await reviewSignIn(email, code);
+      if (review) return review;
+      throw new AuthError('That code is wrong or has expired. Check the latest email, or send a new code.', 400);
+    }
     if (error || !data.user) throw friendly(error);
     return toSession(data.user);
   },
@@ -173,6 +189,25 @@ export const authApi = {
   signInWithGoogle: async () => {
     const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: appUrl() } });
     if (error) throw friendly(error);
+  },
+
+  /**
+   * Deletes the signed-in account for good, with its chats, files and list
+   * (see functions/delete-account), then signs this device out.
+   */
+  async deleteAccount() {
+    const { error } = await supabase.functions.invoke('delete-account', { body: {} });
+    if (error) {
+      let message = 'Could not delete your account right now. Please try again.';
+      try {
+        const body = await (error as { context?: Response }).context?.json?.();
+        if (body?.error) message = body.error;
+      } catch {
+        /* keep the generic message */
+      }
+      throw new AuthError(message, 500);
+    }
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
   },
 
   /** Ends this browser's session only (other devices stay signed in). */
