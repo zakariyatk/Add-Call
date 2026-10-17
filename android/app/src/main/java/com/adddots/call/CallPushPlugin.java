@@ -26,11 +26,16 @@ import com.google.firebase.messaging.FirebaseMessaging;
  */
 @CapacitorPlugin(
     name = "CallPush",
-    permissions = { @Permission(alias = CallPushPlugin.NOTIFICATIONS, strings = { Manifest.permission.POST_NOTIFICATIONS }) }
+    permissions = {
+        @Permission(alias = CallPushPlugin.NOTIFICATIONS, strings = { Manifest.permission.POST_NOTIFICATIONS }),
+        @Permission(alias = CallPushPlugin.CALLS, strings = { Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA }),
+    }
 )
 public class CallPushPlugin extends Plugin {
 
     static final String NOTIFICATIONS = "notifications";
+    /** Microphone and camera, asked with notifications so a call never stops for a permission prompt. */
+    static final String CALLS = "calls";
 
     private static CallPushPlugin instance;
     /** A notification button that opened the app before the plugin loaded. */
@@ -83,15 +88,13 @@ public class CallPushPlugin extends Plugin {
             call.reject("Call notifications aren't set up in this version of the app.", "unavailable");
             return;
         }
-        if (!notificationsAllowed()) {
-            if (call.getBoolean("prompt", false) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                requestPermissionForAlias(NOTIFICATIONS, call, "afterPermission");
-            } else {
-                call.reject("Notifications are turned off for this app.", "denied");
-            }
-            return;
-        }
-        fetchToken(call);
+        boolean prompt = call.getBoolean("prompt", false);
+        boolean askNotifications = !notificationsAllowed() && prompt && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU;
+        boolean askCalls = prompt && getPermissionState(CALLS) != PermissionState.GRANTED;
+        if (askNotifications && askCalls) requestPermissionForAliases(new String[] { NOTIFICATIONS, CALLS }, call, "afterPermission");
+        else if (askNotifications) requestPermissionForAlias(NOTIFICATIONS, call, "afterPermission");
+        else if (askCalls) requestPermissionForAlias(CALLS, call, "afterPermission");
+        else afterPermission(call);
     }
 
     @PermissionCallback

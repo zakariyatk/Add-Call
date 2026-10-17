@@ -275,7 +275,8 @@ guessed. Other accounts aren't affected.
    (`supabase functions deploy call-push --no-verify-jwt`).
 4. Build the app again (`npm run android`).
 
-The app asks for notification permission at the first sign-in and then rings
+The app asks for notification, microphone and camera permission at the first
+sign-in (so calls never stop for a prompt) and then rings
 like a phone call: full screen on a locked phone, with **Answer** and
 **Decline**, until it's answered, declined or 40 seconds pass. Missed calls and
 messages show as notifications. On Android 14 and later, people allow the full
