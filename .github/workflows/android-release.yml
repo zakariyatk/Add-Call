@@ -1,0 +1,87 @@
+name: Android release
+
+# Builds the signed app for Google Play (.aab) and a signed .apk to install
+# directly, without Android Studio. Run it from GitHub → Actions → Android
+# release → Run workflow, then download the files from the run's Artifacts.
+#
+# Needs these repository secrets (Settings → Secrets and variables → Actions),
+# see README → Android app → Release build for Google Play:
+#   ANDROID_KEYSTORE_BASE64   the upload key (.jks), base64-encoded
+#   ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#   GOOGLE_SERVICES_JSON      optional: android/app/google-services.json, for call
+#                             notifications (Firebase), if it isn't committed
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version people see in Google Play (for example 1.0.1)'
+        required: true
+        default: '1.0'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # Always goes up, as Google Play requires; the run number of this workflow.
+      ANDROID_VERSION_CODE: ${{ github.run_number }}
+      ANDROID_VERSION_NAME: ${{ inputs.version_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Check the signing secrets
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Add the ANDROID_KEYSTORE_BASE64, ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD secrets (see README → Android app)."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+          echo "ANDROID_STORE_FILE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+
+      - name: Add google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          elif [ ! -f android/app/google-services.json ]; then
+            echo "::warning::No google-services.json: this build can't ring when the app is closed (see README → Set up → 10)."
+          fi
+
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+
+      - name: Build and sign
+        working-directory: android
+        env:
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace
+
+      - name: Name the files after the version
+        run: |
+          mkdir -p release
+          cp android/app/build/outputs/bundle/release/app-release.aab "release/add-call-${ANDROID_VERSION_NAME}-${ANDROID_VERSION_CODE}.aab"
+          cp android/app/build/outputs/apk/release/app-release.apk "release/add-call-${ANDROID_VERSION_NAME}-${ANDROID_VERSION_CODE}.apk"
+          echo "Built version ${ANDROID_VERSION_NAME} (code ${ANDROID_VERSION_CODE})" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: add-call-${{ inputs.version_name }}-${{ github.run_number }}
+          path: release/
+          retention-days: 30

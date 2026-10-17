@@ -26,9 +26,11 @@ jobs:
           path: dist
           retention-days: 7
 
-  # Builds the Android app (debug, unsigned for Play), so native code that
-  # doesn't compile is caught here. Without google-services.json the app
-  # builds without Firebase; call notifications then report "not available".
+  # Builds the Android app, so native code that doesn't compile is caught
+  # here: a debug APK to try out, and an unsigned release build, which also
+  # runs the release checks (lint) that the signed release build will.
+  # Without google-services.json the app builds without Firebase; call
+  # notifications then report "not available".
   android:
     runs-on: ubuntu-latest
     steps:
@@ -46,7 +48,7 @@ jobs:
       - run: npx cap sync android
       - name: Build the app
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug assembleRelease --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: add-call-debug-apk
