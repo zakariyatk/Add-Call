@@ -10,6 +10,8 @@ name: Android release
 #   ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
 #   GOOGLE_SERVICES_JSON      optional: android/app/google-services.json, for call
 #                             notifications (Firebase), if it isn't committed
+# and, for "Continue with Google" in the app, the repository variable
+# (Variables tab, not Secrets) GOOGLE_WEB_CLIENT_ID.
 
 on:
   workflow_dispatch:
@@ -63,6 +65,8 @@ jobs:
 
       - run: npm ci
       - run: npm run build
+        env:
+          VITE_GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
       - run: npx cap sync android
 
       - name: Build and sign

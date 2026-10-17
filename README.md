@@ -282,12 +282,34 @@ messages show as notifications. On Android 14 and later, people allow the full
 screen call in Settings → Calling → Incoming call screen (Google Play grants it
 to calling apps, declared in Play Console → App content → Full-screen intent).
 
+### 11. Continue with Google in the Android app
+
+The app can't use Google's web page (Google blocks it inside apps), so it uses
+Android's Google account sheet and hands the token to Supabase. Needs step 3
+(Google sign-in on the website) first.
+
+1. In [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials),
+   in the same project as the website's OAuth client, **Create credentials →
+   OAuth client ID → Android**: package name `com.adddots.call`, and the
+   **SHA-1** of your upload key (`keytool -list -v -keystore
+   android/add-call-upload.jks -alias upload`). After the first upload to
+   Google Play, make a second Android client with the SHA-1 from Play Console →
+   **Setup → App signing → App signing key certificate** (apps installed from
+   Play are signed with that one).
+2. Copy the **Web application** client's ID (the one in Supabase → Auth →
+   Providers → Google). In GitHub → Settings → Secrets and variables → Actions
+   → **Variables**, add `GOOGLE_WEB_CLIENT_ID` with it. Local builds read
+   `VITE_GOOGLE_WEB_CLIENT_ID` from `.env.local`.
+3. Run **Actions → Android release** again. The app's sign-in screen now
+   shows **Continue with Google**.
+
 ## Android app
 
 The same app, wrapped with [Capacitor](https://capacitorjs.com) (`android/`,
 app id `com.adddots.call`). It uses the same accounts, Supabase project and
-LiveKit as the website. Sign-in is with the emailed code (Google doesn't allow
-its sign-in inside apps).
+LiveKit as the website. Sign-in is with the emailed code, or **Continue with
+Google** through Android's own Google account sheet once it's set up (Set up →
+11).
 
 One time: install [Android Studio](https://developer.android.com/studio) (it
 includes Java and the Android SDK).
