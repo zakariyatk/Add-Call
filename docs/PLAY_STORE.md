@@ -28,7 +28,9 @@ https://call.adddots.com/delete-account (they go live with the next deploy of
 ## 3. Build
 
 README → Android app → **Release build for Google Play**: make the upload key,
-`android/keystore.properties`, then `npm run android:bundle`. Upload
+then either build on your computer (`android/keystore.properties`, then
+`npm run android:bundle`) or let GitHub build it (**Actions → Android
+release**, after adding the signing secrets). Upload
 `android/app/build/outputs/bundle/release/app-release.aab`. Accept **Play App
 Signing** when asked.
 
@@ -114,7 +116,7 @@ stored, so they aren't "collected".
 
 ## Before every update
 
-- Raise `versionCode` and `versionName` in `android/app/build.gradle`.
-- `npm run android:bundle`, upload the new .aab, write release notes.
+- Run **Actions → Android release** with the new version name (the
+  `versionCode` goes up by itself), upload the new .aab, write release notes.
 - If the app starts collecting something new, update the privacy policy
   (`src/branding/legal.ts`, `privacyUpdated`) and the Data safety form.

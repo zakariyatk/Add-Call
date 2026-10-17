@@ -332,9 +332,26 @@ and build:
 npm run android:bundle   # → android/app/build/outputs/bundle/release/app-release.aab
 ```
 
-Before each upload, raise `versionCode` (and `versionName`) in
-[`android/app/build.gradle`](android/app/build.gradle). The whole Play Store
-checklist is in **[docs/PLAY_STORE.md](docs/PLAY_STORE.md)**.
+**Or let GitHub build it** (no Android Studio needed):
+
+1. Make the upload key once with the `keytool` command above (it comes with
+   Java; install [Temurin 21](https://adoptium.net) if you don't have it).
+2. Turn it into text: `base64 -w0 android/add-call-upload.jks` on Linux,
+   `base64 -i android/add-call-upload.jks` on a Mac, or
+   `[Convert]::ToBase64String([IO.File]::ReadAllBytes("android\add-call-upload.jks"))`
+   in Windows PowerShell.
+3. In GitHub → **Settings → Secrets and variables → Actions**, add
+   `ANDROID_KEYSTORE_BASE64` (that text), `ANDROID_STORE_PASSWORD`,
+   `ANDROID_KEY_ALIAS` (`upload`) and `ANDROID_KEY_PASSWORD`. If
+   `google-services.json` isn't committed, add its contents as
+   `GOOGLE_SERVICES_JSON`.
+4. **Actions → Android release → Run workflow**, type the version (for
+   example `1.0.1`), and download the `.aab` (for Google Play) and `.apk` (to
+   install directly) from the finished run's **Artifacts**.
+
+Each run gets a higher `versionCode` automatically, as Google Play requires.
+Local builds use `versionCode` 1 unless `ANDROID_VERSION_CODE` is set. The
+whole Play Store checklist is in **[docs/PLAY_STORE.md](docs/PLAY_STORE.md)**.
 
 ## Security model and limits
 

@@ -39,7 +39,7 @@ export function RecentsView({
           </EmptyState>
         ) : (
           <EmptyState icon="phone" title="No calls yet">
-            Start a voice or video call from Contacts.
+            Start a voice or video call from People or a chat.
           </EmptyState>
         )
       ) : (
@@ -56,10 +56,12 @@ export function RecentsView({
                   {DIRECTION_LABEL[r.direction]}
                   {r.video ? ' video' : ''}
                   {r.duration > 0 && <> · {formatDuration(r.duration)}</>}
+                  {/* Phones: the time moves here, leaving room for the buttons. */}
+                  <span className="recent-time-inline"> · {formatRelative(r.at, now)}</span>
                 </span>
               </span>
-              <span className="list-meta">{formatRelative(r.at, now)}</span>
-              <button type="button" className="icon-btn" aria-label={`Message ${r.peer.name}`} title="Message" onClick={() => onMessage(r.peer)}>
+              <span className="list-meta recent-time">{formatRelative(r.at, now)}</span>
+              <button type="button" className="icon-btn recent-message" aria-label={`Message ${r.peer.name}`} title="Message" onClick={() => onMessage(r.peer)}>
                 <Icon name="message" size={20} />
               </button>
               <CallButton label={`${r.video ? 'Video call' : 'Call'} ${r.peer.name}`} onClick={() => onCall(r.peer, r.video)} />

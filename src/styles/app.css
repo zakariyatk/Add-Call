@@ -3391,3 +3391,17 @@ video {
   border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
   border-radius: calc(var(--radius) - 4px);
 }
+
+/* Calls: on phones the time joins the second line and only the call button stays, so the details fit. */
+.recent-time-inline {
+  display: none;
+}
+@media (max-width: 560px) {
+  .recent-time,
+  .recent-message {
+    display: none;
+  }
+  .recent-time-inline {
+    display: inline;
+  }
+}
