@@ -61,6 +61,11 @@ export async function removeContact(id: string): Promise<void> {
   }
 }
 
+/** Takes someone off the list on this device only (the server already did, e.g. when blocking). */
+export function forgetContact(id: string) {
+  if (state.contacts.some((c) => c.id === id)) set({ ...state, contacts: state.contacts.filter((c) => c.id !== id) });
+}
+
 /** Your list, loaded while someone is signed in. */
 export function useContacts(userId: string | null) {
   const snapshot = useSyncExternalStore(subscribe, () => state);

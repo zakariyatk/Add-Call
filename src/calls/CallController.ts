@@ -2,6 +2,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { brand } from '../branding/brand.config';
 import { Rejoiner } from '../lib/rejoin';
 import { supabase } from '../lib/supabase';
+import { findPerson } from '../profile/username';
 import { callReducer, IDLE, isActive, toRecord, type CallAction, type CallState } from './callMachine';
 import type { MediaSession } from './media';
 import { notifyIncomingCall } from './notify';
@@ -46,10 +47,12 @@ export interface CallUser {
   name: string;
 }
 
+/** What each person shares on the "online" channel (keyed by their account id). */
 interface PresenceMeta {
-  email: string;
-  name: string;
   busy: boolean;
+  /** Always empty: tabs still running an older release read these, and break without them. */
+  email: '';
+  name: '';
 }
 
 /** How long the "Call ended" screen stays up. */
@@ -70,7 +73,9 @@ function mediaError(err: unknown, video: boolean): string {
 }
 
 const peerOf = (row: CallRow, meId: string): Peer =>
-  row.caller_id === meId ? { email: row.callee_email, name: row.callee_name } : { email: row.caller_email, name: row.caller_name };
+  row.caller_id === meId
+    ? { id: row.callee_id, email: row.callee_email, name: row.callee_name }
+    : { id: row.caller_id, email: row.caller_email, name: row.caller_name };
 
 export class CallController {
   private snapshot: CallSnapshot = {
@@ -258,7 +263,10 @@ export class CallController {
     this.clearReset();
     this.dispatch({ type: 'dial', callId, peer, video, at: Date.now() });
 
-    const online = this.snapshot.presence.find((p) => p.email === peer.email);
+    // Presence knows people by account id only; Recents remembers just the email.
+    const peerId = peer.id ?? (await findPerson(peer.email).then((p) => p?.id, () => undefined));
+    if (!this.isCurrent(callId, 'calling')) return;
+    const online = peerId ? this.snapshot.presence.find((p) => p.id === peerId) : undefined;
     if (online?.busy) return this.dispatch({ type: 'end', reason: 'busy', at: Date.now() });
     if (!online) {
       // Not in the app right now: ring them with a push if one of their browsers allows it.
@@ -556,14 +564,14 @@ export class CallController {
     const users: PresenceUser[] = [];
     for (const [id, metas] of Object.entries(state)) {
       if (id === this.me?.id || !metas.length) continue;
-      users.push({ email: metas[0].email, name: metas[0].name, busy: metas.some((m) => m.busy) });
+      users.push({ id, busy: metas.some((m) => m.busy) });
     }
     this.set({ presence: users });
   }
 
   private async trackPresence() {
     if (!this.online || !this.me || this.snapshot.connection !== 'online') return;
-    await this.online.track({ email: this.me.email, name: this.me.name, busy: isActive(this.snapshot.call.status) } satisfies PresenceMeta);
+    await this.online.track({ busy: isActive(this.snapshot.call.status), email: '', name: '' } satisfies PresenceMeta);
   }
 
   private stopRinging() {

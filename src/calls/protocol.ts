@@ -12,7 +12,13 @@ export interface UserInfo {
   name: string;
 }
 
-export interface PresenceUser extends UserInfo {
+/**
+ * Someone in the app right now. Presence shares only the account id and
+ * whether they're on a call, never names or emails: everyone signed in can
+ * see it, so the app matches ids to people it already knows.
+ */
+export interface PresenceUser {
+  id: string;
   /** In a call or ringing. */
   busy: boolean;
 }

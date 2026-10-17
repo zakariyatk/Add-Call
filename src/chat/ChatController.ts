@@ -74,7 +74,7 @@ export class ChatController {
   private signed = new Map<string, { url: string; until: number }>();
   /** Local previews (object URLs) of photos and voice notes this device sent. */
   private previews = new Map<string, string>();
-  private isOnline: (email: string) => boolean = () => false;
+  private isOnline: (userId: string) => boolean = () => false;
   /** Rebuilds the channel when the server drops it and it doesn't come back. */
   private rejoiner = new Rejoiner(() => void this.rejoin());
   /** A channel still being removed. */
@@ -174,7 +174,7 @@ export class ChatController {
   }
 
   /** Lets the controller ask whether someone is in the app right now (calls presence). */
-  setOnlineLookup(fn: (email: string) => boolean) {
+  setOnlineLookup(fn: (userId: string) => boolean) {
     this.isOnline = fn;
   }
 
@@ -392,7 +392,7 @@ export class ChatController {
       if (this.me !== me) return;
       this.put(data as MessageRow);
       // Not in the app: tell their phone.
-      if (!this.isOnline(conv.peer.email)) {
+      if (!this.isOnline(conv.peer.id)) {
         void supabase.functions.invoke('call-push', { body: { action: 'message', messageId: id } }).then(({ error: e }) => {
           if (e) console.warn('[chat] push', e.message);
         });

@@ -50,6 +50,14 @@ export interface BrandConfig {
   /** Used for <meta name="description"> and the manifest. */
   description: string;
   version: string;
+  /** Where the website lives (links to the privacy policy point here, also from the apps). */
+  website: string;
+  /** Who runs the service, as named in the privacy policy. */
+  operator: string;
+  /** Where people write about privacy, account deletion and reports. */
+  supportEmail: string;
+  /** Last change to the privacy policy (YYYY-MM-DD). */
+  privacyUpdated: string;
   /** Prefix for localStorage keys, so a rename never collides with old data. */
   storageKey: string;
   logo: { light: LogoColors; dark: LogoColors };
@@ -68,6 +76,10 @@ export const brand: BrandConfig = {
   tagline: 'Calls, simply added.',
   description: 'Add Call is a web calling app for clear, fast voice and video calls right from your browser.',
   version: '0.1.0',
+  website: 'https://call.adddots.com',
+  operator: 'Adddots',
+  supportEmail: 'support@adddots.com',
+  privacyUpdated: '2026-10-18',
   storageKey: 'addcall',
 
   logo: {

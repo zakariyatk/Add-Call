@@ -195,6 +195,13 @@ export function LoginScreen({
                 New here? Your account is created automatically
               </li>
             </ul>
+            <p className="login-legal">
+              By continuing, you accept our{' '}
+              <a href={`${brand.website}/privacy`} target="_blank" rel="noopener noreferrer">
+                privacy policy
+              </a>
+              . You must be 13 or older.
+            </p>
             <PhotoCredit className="is-phone-only" />
           </form>
         ) : (

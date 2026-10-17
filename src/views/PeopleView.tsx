@@ -1,12 +1,10 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { brand } from '../branding/brand.config';
-import type { ConnectionStatus } from '../calls/CallController';
 import { type PresenceUser } from '../calls/protocol';
 import type { Peer } from '../calls/types';
 import { Icon } from '../components/Icon';
 import { Avatar, CallButton, EmptyState, PageHeader, PresenceAvatar } from '../components/ui';
 import { addContact, removeContact, useContactAction } from '../people/contacts';
-import { useUsername } from '../profile/avatars';
 import { findPerson, handle, type Person } from '../profile/username';
 
 export function PeopleView({
@@ -14,7 +12,6 @@ export function PeopleView({
   presence,
   contacts,
   contactsLoaded,
-  connection,
   onCall,
   onMessage,
 }: {
@@ -23,7 +20,6 @@ export function PeopleView({
   /** My list. */
   contacts: Person[];
   contactsLoaded: boolean;
-  connection: ConnectionStatus;
   onCall: (p: Peer, video: boolean) => void;
   onMessage: (p: Peer) => void;
 }) {
@@ -35,8 +31,8 @@ export function PeopleView({
   const action = useContactAction();
 
   const listed = new Set(contacts.map((c) => c.email));
-  const statusOf = (email: string) => presence.find((p) => p.email === email);
-  const others = presence.filter((p) => !listed.has(p.email)).sort((a, b) => a.name.localeCompare(b.name));
+  // Presence names nobody: it only says which account ids are online, matched here to your list.
+  const statusOf = (id: string) => presence.find((p) => p.id === id);
 
   const search = async (e: FormEvent) => {
     e.preventDefault();
@@ -149,7 +145,7 @@ export function PeopleView({
       ) : (
         <ul className="list card">
           {contacts.map((c) => {
-            const live = statusOf(c.email);
+            const live = statusOf(c.id);
             return (
               <PersonRow
                 key={c.id}
@@ -191,34 +187,6 @@ export function PeopleView({
         </ul>
       )}
 
-      <h2 className="group-label online-label">
-        Online now{others.length > 0 && ` · ${others.length}`}
-      </h2>
-      {connection === 'connecting' ? (
-        <div className="list card" aria-busy="true" aria-label="Loading people online">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="list-row" aria-hidden="true">
-              <span className="skeleton skeleton-avatar" />
-              <span className="list-main">
-                <span className="skeleton skeleton-line" />
-                <span className="skeleton skeleton-line is-short" />
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : connection === 'offline' ? (
-        <EmptyState icon="wifiOff" title="You're offline">
-          Not connected to {brand.name}. Reconnecting…
-        </EmptyState>
-      ) : others.length === 0 ? (
-        <EmptyState icon="users">{presence.length ? 'Everyone online is already in your list.' : 'No one else is online right now.'}</EmptyState>
-      ) : (
-        <ul className="list card">
-          {others.map((u) => (
-            <OnlineRow key={u.email} user={u} adding={action.busy === u.email} onAdd={() => add(u.email, u.email)} onCall={onCall} onMessage={onMessage} />
-          ))}
-        </ul>
-      )}
     </section>
   );
 }
@@ -235,38 +203,6 @@ function PersonRow({ person, online, busy, actions }: { person: Person; online: 
         </span>
       </span>
       {actions}
-    </li>
-  );
-}
-
-function OnlineRow({
-  user,
-  adding,
-  onAdd,
-  onCall,
-  onMessage,
-}: {
-  user: PresenceUser;
-  adding: boolean;
-  onAdd: () => void;
-  onCall: (p: Peer, video: boolean) => void;
-  onMessage: (p: Peer) => void;
-}) {
-  const username = useUsername(user.email);
-  return (
-    <li className="list-row">
-      <PresenceAvatar name={user.name} email={user.email} status={user.busy ? 'busy' : 'online'} />
-      <span className="list-main">
-        <span className="list-title">{user.name}</span>
-        <span className="list-sub">{user.busy ? 'On a call' : handle(username, user.email)}</span>
-      </span>
-      <button type="button" className="icon-btn" aria-label={`Add ${user.name} to my list`} title="Add to my list" disabled={adding} onClick={onAdd}>
-        <Icon name="userPlus" size={20} />
-      </button>
-      <button type="button" className="icon-btn" aria-label={`Message ${user.name}`} title="Message" onClick={() => onMessage(user)}>
-        <Icon name="message" size={20} />
-      </button>
-      <CallButton label={`Call ${user.name}`} disabled={user.busy} onClick={() => onCall(user, false)} />
     </li>
   );
 }

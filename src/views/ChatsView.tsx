@@ -13,6 +13,8 @@ import { formatRelative } from '../lib/format';
 import { browserStore } from '../lib/storage';
 import { EMOJI_GROUPS, findSticker, recentStickers, rememberSticker, STICKERS, stickerUrl } from '../chat/stickers';
 import { addContact, useContactAction } from '../people/contacts';
+import { blockUser, unblockUser } from '../people/blocks';
+import { ReportSheet } from '../components/ReportSheet';
 import { useUsername } from '../profile/avatars';
 import { handle } from '../profile/username';
 
@@ -29,13 +31,14 @@ export function ChatsView({
   onStart,
   onCall,
   isContact,
+  isBlocked,
 }: {
   me: Session;
   chat: Chat;
   chatId: string | null;
   now: number;
-  /** Someone's presence (online, on a call, offline). */
-  presenceOf: (email: string) => Presence;
+  /** Someone's presence (online, on a call, offline), by account id. */
+  presenceOf: (userId: string) => Presence;
   onOpen: (id: string) => void;
   onBack: () => void;
   /** Opens the chat with an @username or email; resolves to an error message, or null. */
@@ -43,6 +46,8 @@ export function ChatsView({
   onCall: (p: Peer, video: boolean) => void;
   /** Whether someone is in my list. */
   isContact: (email: string) => boolean;
+  /** Whether I blocked someone, by account id. */
+  isBlocked: (userId: string) => boolean;
 }) {
   const conv = chatId ? chat.conversations.find((c) => c.id === chatId) : undefined;
 
@@ -62,10 +67,11 @@ export function ChatsView({
             me={me}
             conv={conv}
             chat={chat}
-            presence={presenceOf(conv.peer.email)}
+            presence={presenceOf(conv.peer.id)}
             listed={isContact(conv.peer.email)}
+            blocked={isBlocked(conv.peer.id)}
             onBack={onBack}
-            onCall={(video) => onCall({ email: conv.peer.email, name: conv.peer.name }, video)}
+            onCall={(video) => onCall({ id: conv.peer.id, email: conv.peer.email, name: conv.peer.name }, video)}
           />
         ) : chatId ? (
           <div className="chat-placeholder">
@@ -102,7 +108,7 @@ function ChatList({
   chat: Chat;
   activeId: string | null;
   now: number;
-  presenceOf: (email: string) => Presence;
+  presenceOf: (userId: string) => Presence;
   onOpen: (id: string) => void;
   onStart: (query: string) => Promise<string | null>;
 }) {
@@ -193,7 +199,7 @@ function ChatList({
                 aria-current={c.id === activeId ? 'true' : undefined}
                 onClick={(e) => (e.preventDefault(), onOpen(c.id))}
               >
-                <PresenceAvatar name={c.peer.name} email={c.peer.email} status={presenceOf(c.peer.email)} size={48} />
+                <PresenceAvatar name={c.peer.name} email={c.peer.email} status={presenceOf(c.peer.id)} size={48} />
                 <span className="list-main">
                   <span className="chat-row-top">
                     <span className="list-title">{c.peer.name}</span>
@@ -257,6 +263,7 @@ function ChatThread({
   chat,
   presence,
   listed,
+  blocked,
   onBack,
   onCall,
 }: {
@@ -266,6 +273,8 @@ function ChatThread({
   presence: Presence;
   /** In my list (otherwise the header offers Add). */
   listed: boolean;
+  /** I blocked them: no calls or messages either way until I unblock. */
+  blocked: boolean;
   onBack: () => void;
   onCall: (video: boolean) => void;
 }) {
@@ -275,6 +284,10 @@ function ChatThread({
   const typing = chat.typing[conv.id];
   const [selected, setSelected] = useState<string | null>(null);
   const [viewing, setViewing] = useState<Message | null>(null);
+  const [menu, setMenu] = useState(false);
+  /** Reporting them: true for the person, a message id for one message. */
+  const [reporting, setReporting] = useState<true | string | null>(null);
+  const [blockError, setBlockError] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const olderFrom = useRef<number | null>(null);
@@ -304,6 +317,17 @@ function ChatThread({
   const username = useUsername(conv.peer.email) ?? conv.peer.username;
   const status = typing ? 'typing…' : presence === 'online' ? 'online' : presence === 'busy' ? 'on a call' : handle(username, conv.peer.email);
   const adding = useContactAction();
+  const peer = conv.peer;
+  const toggleBlock = async () => {
+    setMenu(false);
+    setBlockError(null);
+    if (!blocked && !window.confirm(`Block ${peer.name}? They won’t be able to call or message you, and you won’t be able to call or message them. They won’t be told.`)) return;
+    try {
+      await (blocked ? unblockUser(peer.id) : blockUser(peer));
+    } catch (err) {
+      setBlockError(err instanceof Error ? err.message : 'Something went wrong.');
+    }
+  };
 
   return (
     <div className="thread">
@@ -313,16 +337,29 @@ function ChatThread({
             <Icon name="close" size={22} />
           </button>
           <span className="thread-title">1 selected</span>
-          <button
-            type="button"
-            className="btn btn-secondary btn-danger"
-            onClick={() => {
-              if (window.confirm('Delete this message for everyone?')) void controller.deleteMessage(conv.id, selectedMsg.id);
-              setSelected(null);
-            }}
-          >
-            <Icon name="trash" size={18} /> Delete for everyone
-          </button>
+          {selectedMsg.sender_id === me.id ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-danger"
+              onClick={() => {
+                if (window.confirm('Delete this message for everyone?')) void controller.deleteMessage(conv.id, selectedMsg.id);
+                setSelected(null);
+              }}
+            >
+              <Icon name="trash" size={18} /> Delete for everyone
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-secondary btn-danger"
+              onClick={() => {
+                setReporting(selectedMsg.id);
+                setSelected(null);
+              }}
+            >
+              <Icon name="flag" size={18} /> Report
+            </button>
+          )}
         </header>
       ) : (
         <header className="thread-header">
@@ -334,7 +371,7 @@ function ChatThread({
             <span className="thread-title">{conv.peer.name}</span>
             <span className={`thread-status ${typing || presence === 'online' ? 'is-live' : ''}`}>{status}</span>
           </span>
-          {!listed && (
+          {!listed && !blocked && (
             <button
               type="button"
               className="icon-btn"
@@ -346,11 +383,18 @@ function ChatThread({
               <Icon name="userPlus" size={21} />
             </button>
           )}
-          <button type="button" className="icon-btn" aria-label={`Video call ${conv.peer.name}`} title="Video call" onClick={() => onCall(true)}>
-            <Icon name="video" size={22} />
-          </button>
-          <button type="button" className="icon-btn" aria-label={`Call ${conv.peer.name}`} title="Call" onClick={() => onCall(false)}>
-            <Icon name="phone" size={21} />
+          {!blocked && (
+            <>
+              <button type="button" className="icon-btn" aria-label={`Video call ${conv.peer.name}`} title="Video call" onClick={() => onCall(true)}>
+                <Icon name="video" size={22} />
+              </button>
+              <button type="button" className="icon-btn" aria-label={`Call ${conv.peer.name}`} title="Call" onClick={() => onCall(false)}>
+                <Icon name="phone" size={21} />
+              </button>
+            </>
+          )}
+          <button type="button" className="icon-btn" aria-label="More options" aria-haspopup="dialog" title="More" onClick={() => setMenu(true)}>
+            <Icon name="more" size={22} />
           </button>
         </header>
       )}
@@ -373,6 +417,7 @@ function ChatThread({
               key={m.id}
               m={m}
               mine={m.sender_id === me.id}
+              reportable={m.sender_id !== me.id}
               dayLabel={startsNewDay(messages, i) ? dayLabel(Date.parse(m.created_at), Date.now()) : null}
               grouped={i > 0 && messages[i - 1].sender_id === m.sender_id && !startsNewDay(messages, i)}
               selected={selected === m.id}
@@ -402,17 +447,55 @@ function ChatThread({
         </div>
       )}
 
-      <Composer
-        disabled={chat.connection !== 'online'}
-        onText={(t) => ((stick.current = true), controller.sendText(conv.id, t))}
-        onFiles={(files, asPhoto) => {
-          stick.current = true;
-          for (const f of files) void controller.sendFile(conv.id, f, asPhoto);
-        }}
-        onVoice={(blob, ms) => ((stick.current = true), controller.sendVoice(conv.id, blob, ms))}
-        onSticker={(id) => ((stick.current = true), controller.sendSticker(conv.id, id))}
-        onTyping={controller.notifyTyping}
-      />
+      {blockError && (
+        <div className="thread-notice" role="alert">
+          <span>{blockError}</span>
+          <button type="button" className="icon-btn" aria-label="Dismiss" onClick={() => setBlockError(null)}>
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+      )}
+
+      {blocked ? (
+        <div className="thread-blocked">
+          <span>You blocked {peer.name}. Neither of you can call or message the other.</span>
+          <button type="button" className="btn btn-secondary btn-small" onClick={() => void toggleBlock()}>
+            Unblock
+          </button>
+        </div>
+      ) : (
+        <Composer
+          disabled={chat.connection !== 'online'}
+          onText={(t) => ((stick.current = true), controller.sendText(conv.id, t))}
+          onFiles={(files, asPhoto) => {
+            stick.current = true;
+            for (const f of files) void controller.sendFile(conv.id, f, asPhoto);
+          }}
+          onVoice={(blob, ms) => ((stick.current = true), controller.sendVoice(conv.id, blob, ms))}
+          onSticker={(id) => ((stick.current = true), controller.sendSticker(conv.id, id))}
+          onTyping={controller.notifyTyping}
+        />
+      )}
+
+      {menu && (
+        <div className="sheet-backdrop" onClick={() => setMenu(false)}>
+          <div className="sheet" role="dialog" aria-modal="true" aria-label={`${peer.name}: options`} onClick={(e) => e.stopPropagation()}>
+            <p className="sheet-title">{peer.name}</p>
+            <button type="button" className="sheet-item is-danger" onClick={() => (setMenu(false), setReporting(true))} autoFocus>
+              <Icon name="flag" size={22} /> Report {peer.name}
+            </button>
+            <button type="button" className="sheet-item is-danger" onClick={() => void toggleBlock()}>
+              <Icon name="ban" size={22} /> {blocked ? `Unblock ${peer.name}` : `Block ${peer.name}`}
+            </button>
+            <button type="button" className="sheet-item sheet-cancel" onClick={() => setMenu(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {reporting && (
+        <ReportSheet person={peer} messageId={reporting === true ? undefined : reporting} blocked={blocked} onClose={() => setReporting(null)} />
+      )}
 
       {viewing && <Lightbox m={viewing} controller={controller} onClose={() => setViewing(null)} />}
     </div>
@@ -444,6 +527,7 @@ function Linkified({ text }: { text: string }) {
 function MessageItem({
   m,
   mine,
+  reportable,
   dayLabel: day,
   grouped,
   selected,
@@ -453,6 +537,8 @@ function MessageItem({
 }: {
   m: Message;
   mine: boolean;
+  /** Someone else's message: it can be selected to report it. */
+  reportable: boolean;
   dayLabel: string | null;
   grouped: boolean;
   selected: boolean;
@@ -461,12 +547,13 @@ function MessageItem({
   onView: () => void;
 }) {
   const deletable = mine && !m.local && !m.deleted_at && Date.now() - Date.parse(m.created_at) < DELETE_WINDOW_MS;
+  const selectable = deletable || (reportable && !m.local && !m.deleted_at);
   const press = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelPress = () => {
     if (press.current) clearTimeout(press.current);
     press.current = null;
   };
-  const selectHandlers = deletable
+  const selectHandlers = selectable
     ? {
         onContextMenu: (e: MouseEvent) => (e.preventDefault(), onSelect()),
         onTouchStart: () => {
@@ -526,9 +613,9 @@ function MessageItem({
             {mine && !m.deleted_at && <Ticks status={sendStatus(m)} />}
           </span>
         </div>
-        {deletable && (
-          <button type="button" className="msg-menu" aria-label="Message options" title="Delete" onClick={onSelect}>
-            <Icon name="trash" size={16} />
+        {selectable && (
+          <button type="button" className="msg-menu" aria-label="Message options" title={deletable ? 'Delete' : 'Report'} onClick={onSelect}>
+            <Icon name={deletable ? 'trash' : 'flag'} size={16} />
           </button>
         )}
       </div>
