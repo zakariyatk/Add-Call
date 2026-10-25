@@ -1,0 +1,13 @@
+{
+  "name": "add-call-store-shots",
+  "private": true,
+  "type": "module",
+  "description": "Microsoft Store and Google Play screenshots of Add Call, from the real app with sample data",
+  "scripts": {
+    "capture": "node capture.mjs",
+    "compose": "node compose.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.56.1"
+  }
+}
