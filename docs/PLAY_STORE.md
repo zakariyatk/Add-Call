@@ -117,6 +117,36 @@ stored, so they aren't "collected".
 ## Before every update
 
 - Run **Actions → Android release** with the new version name (the
-  `versionCode` goes up by itself), upload the new .aab, write release notes.
+  `versionCode` goes up by itself). With automatic uploads (below) it goes
+  straight to the track you pick; otherwise upload the new .aab yourself.
 - If the app starts collecting something new, update the privacy policy
   (`src/branding/legal.ts`, `privacyUpdated`) and the Data safety form.
+
+## Automatic uploads (one time)
+
+After the first .aab has been uploaded by hand (Google's API can't do the
+first one), **Actions → Android release** can send each new build to Google
+Play by itself:
+
+1. [Google Cloud Console](https://console.cloud.google.com) (any project, for
+   example the one for Google sign-in): **APIs & Services → Library**, enable
+   **Google Play Android Developer API**.
+2. **IAM & Admin → Service accounts → Create service account** (name it
+   `play-upload`, no roles). Open it → **Keys → Add key → JSON**; a .json file
+   downloads.
+3. Play Console → **Users and permissions → Invite new users**: the service
+   account's email (`play-upload@….iam.gserviceaccount.com`). Under **App
+   permissions** add Add Call with **Release apps to testing tracks** and
+   **View app information**. Invite. Leave out production releases, so a build
+   never goes public on its own.
+4. GitHub → **Settings → Secrets and variables → Actions → New repository
+   secret**: `PLAY_SERVICE_ACCOUNT_JSON`, with the whole .json file as its
+   value. Then delete the downloaded file.
+
+Now **Run workflow** asks for a track: **internal** (the default), **closed
+testing**, or **none** (only build). Production stays a button in Play
+Console: **Production → Create new release → Add from library**, or
+**Promote release** on a tested release.
+
+Every upload needs a higher `versionCode` than any before; the workflow's run
+number does that, as long as nothing is uploaded from a local build.

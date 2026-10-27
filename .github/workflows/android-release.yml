@@ -10,6 +10,9 @@ name: Android release
 #   ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
 #   GOOGLE_SERVICES_JSON      optional: android/app/google-services.json, for call
 #                             notifications (Firebase), if it isn't committed
+#   PLAY_SERVICE_ACCOUNT_JSON optional: a Google Play service account key, to
+#                             upload the .aab to Google Play by itself (see
+#                             docs/PLAY_STORE.md → Automatic uploads)
 # and, for "Continue with Google" in the app, the repository variable
 # (Variables tab, not Secrets) GOOGLE_WEB_CLIENT_ID.
 
@@ -20,6 +23,14 @@ on:
         description: 'Version people see in Google Play (for example 1.0.1)'
         required: true
         default: '1.0'
+      track:
+        description: 'Upload to Google Play (needs PLAY_SERVICE_ACCOUNT_JSON). Production is always released by hand in Play Console.'
+        type: choice
+        options:
+          - internal
+          - closed testing
+          - none (only build)
+        default: internal
 
 jobs:
   release:
@@ -89,3 +100,34 @@ jobs:
           name: add-call-${{ inputs.version_name }}-${{ github.run_number }}
           path: release/
           retention-days: 30
+
+      # Google Play names the closed testing track "alpha".
+      - name: Choose the Google Play track
+        if: inputs.track != 'none (only build)'
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::warning::No PLAY_SERVICE_ACCOUNT_JSON secret, so the .aab wasn't uploaded to Google Play; download it from Artifacts (see docs/PLAY_STORE.md → Automatic uploads)."
+            exit 0
+          fi
+          case "${{ inputs.track }}" in
+            internal) track=internal ;;
+            'closed testing') track=alpha ;;
+          esac
+          echo "PLAY_TRACK=$track" >> "$GITHUB_ENV"
+
+      - name: Upload to Google Play
+        if: env.PLAY_TRACK != ''
+        uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.adddots.call
+          releaseFiles: release/*.aab
+          releaseName: ${{ inputs.version_name }} (${{ github.run_number }})
+          track: ${{ env.PLAY_TRACK }}
+          status: completed
+
+      - name: Say where it went
+        if: env.PLAY_TRACK != ''
+        run: echo "Uploaded to Google Play → ${{ inputs.track }}" >> "$GITHUB_STEP_SUMMARY"
