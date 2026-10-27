@@ -24,6 +24,9 @@ jobs:
         with:
           name: dist
           path: dist
+          # Keeps public/.htaccess (HTTPS redirect, headers, /privacy and
+          # /delete-account), which upload-artifact leaves out by default.
+          include-hidden-files: true
           retention-days: 7
 
   # Builds the Android app, so native code that doesn't compile is caught
