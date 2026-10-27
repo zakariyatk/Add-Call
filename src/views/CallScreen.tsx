@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CameraFacing } from '../calls/CallController';
+import { canChooseSpeaker, resetCallAudio, setSpeaker } from '../calls/audioRoute';
 import { brand } from '../branding/brand.config';
 import { connectedSeconds, endReasonText, type CallState } from '../calls/callMachine';
 import { Icon, type IconName } from '../components/Icon';
@@ -43,6 +44,23 @@ function useHasSecondCamera(active: boolean): boolean {
     };
   }, [active]);
   return many;
+}
+
+/**
+ * Loudspeaker on or off (Android app only). Until it's tapped, video calls use
+ * the speaker and voice calls the earpiece, like the phone's own calls.
+ */
+function useSpeaker(state: CallState): [boolean, () => void] {
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const on = chosen ?? state.video;
+  const live = ['calling', 'ringing', 'connecting', 'connected'].includes(state.status);
+  // Applied again as the call connects: the WebView's own audio setup can move the sound.
+  useEffect(() => {
+    if (live) setSpeaker(on);
+    else if (state.status === 'ended') resetCallAudio();
+  }, [live, on, state.status]);
+  useEffect(() => () => resetCallAudio(), []);
+  return [on, () => setChosen(!on)];
 }
 
 /** Binds a MediaStream to a <video>; remote audio plays through it too. */
@@ -125,6 +143,7 @@ export function CallScreen({
   const username = useUsername(state.peer?.email);
   const showSelfView = !!localStream && state.video && localStream.getVideoTracks().length > 0;
   const canSwitchCamera = useHasSecondCamera(showSelfView);
+  const [speakerOn, toggleSpeaker] = useSpeaker(state);
 
   if (!state.peer) return null;
   const ended = state.status === 'ended';
@@ -172,6 +191,7 @@ export function CallScreen({
         ) : (
           <>
             <Control icon={state.muted ? 'micOff' : 'mic'} label={state.muted ? 'Unmute' : 'Mute'} pressed={state.muted} onClick={onToggleMute} disabled={ended || !localStream} />
+            {canChooseSpeaker && <Control icon="speaker" label="Speaker" pressed={speakerOn} onClick={toggleSpeaker} disabled={ended} />}
             <Control icon={state.video ? 'video' : 'videoOff'} label="Camera" pressed={state.video} onClick={onToggleVideo} disabled={ended || !localStream} />
             {canSwitchCamera && state.video && <Control icon="cameraSwitch" label="Flip" onClick={onSwitchCamera} disabled={ended} />}
             <Control icon="phoneOff" label="End" variant="end" onClick={onHangUp} disabled={ended} />
