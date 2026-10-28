@@ -19,6 +19,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(CallPushPlugin.class);
         registerPlugin(GoogleAuthPlugin.class);
+        registerPlugin(CallAudioPlugin.class);
         super.onCreate(savedInstanceState);
         handleCallIntent(getIntent());
     }
