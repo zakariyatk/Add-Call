@@ -13,6 +13,8 @@ import { removeAvatar, uploadAvatar, useAvatarUrl } from '../profile/avatars';
 import { unblockUser } from '../people/blocks';
 import { handle, type Person } from '../profile/username';
 import { Avatar, Switch } from '../components/ui';
+import { QrCode } from '../components/QrCode';
+import { inviteUrl } from '../people/inviteLink';
 import type { Settings } from '../settings';
 import type { SettingsPage } from './settingsPages';
 import { previewRingtone, RINGTONE_IDS, type RingtoneId } from '../calls/ringtone';
@@ -26,6 +28,7 @@ const THEMES: { id: ThemeMode; label: string }[] = [
 const RINGTONE_LABELS: Record<RingtoneId, string> = { classic: 'Classic', bright: 'Bright', soft: 'Soft' };
 
 const PAGE_TITLES: Record<SettingsPage, string> = {
+  invite: 'Invite friends',
   profile: 'Edit profile',
   appearance: 'Appearance',
   calling: 'Calling',
@@ -86,6 +89,8 @@ export function SettingsView({
           </button>
           <h1 id="settings-page-title">{PAGE_TITLES[page]}</h1>
         </header>
+
+        {page === 'invite' && <InvitePage session={session} username={username} onEditProfile={() => onOpen('profile')} />}
 
         {page === 'profile' && (
           <>
@@ -186,7 +191,7 @@ export function SettingsView({
         {username && <span className="settings-hero-handle">@{username}</span>}
       </div>
 
-      <InviteCard username={username} />
+      <InviteCard onOpen={() => onOpen('invite')} />
 
       <h2 className="settings-heading">Account</h2>
       <div className="settings-group">
@@ -278,34 +283,13 @@ function NavRow({
   );
 }
 
-/** Shares your @username, so friends can find and call you. */
-function InviteCard({ username }: { username: string | null }) {
-  const [copied, setCopied] = useState(false);
-  const text = `Call me on ${brand.name}${username ? `: I'm @${username}` : ''}. ${brand.website}`;
-  const invite = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: brand.name, text });
-        return;
-      } catch (err) {
-        if ((err as Error).name === 'AbortError') return;
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 4000);
-    } catch {
-      /* nothing to fall back to */
-    }
-  };
+/** Opens Invite friends: your QR code and link. */
+function InviteCard({ onOpen }: { onOpen: () => void }) {
   return (
-    <button type="button" className="invite-card" onClick={() => void invite()}>
+    <button type="button" className="invite-card" onClick={onOpen}>
       <span className="invite-card-text">
         <span className="invite-card-title">Invite friends</span>
-        <span className="invite-card-hint" role="status">
-          {copied ? 'Invite copied. Paste it in a message to a friend.' : 'Share your @username so they can call you'}
-        </span>
+        <span className="invite-card-hint">Show your QR code or share your link</span>
       </span>
       <span className="invite-card-art" aria-hidden="true">
         <span className="invite-card-bubble">
@@ -317,6 +301,71 @@ function InviteCard({ username }: { username: string | null }) {
         </span>
       </span>
     </button>
+  );
+}
+
+/** Your QR code and personal link (call.adddots.com/@you), which open you in People on their side. */
+function InvitePage({ session, username, onEditProfile }: { session: Session; username: string | null; onEditProfile: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!username)
+    return (
+      <div className="invite-page">
+        <p className="muted">Choose an @username first, so friends can find you.</p>
+        <button type="button" className="btn btn-primary" onClick={onEditProfile}>
+          Choose @username
+        </button>
+      </div>
+    );
+  const url = inviteUrl(brand.website, username);
+  const text = `Add me on ${brand.name}, I'm @${username}`;
+  const copy = async () => {
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 3000);
+    } catch {
+      setError('Couldn’t copy. Press and hold the link to copy it.');
+    }
+  };
+  const share = async () => {
+    if (!navigator.share) return copy();
+    try {
+      await navigator.share({ title: brand.name, text, url });
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') void copy();
+    }
+  };
+  return (
+    <div className="invite-page">
+      <div className="invite-who">
+        <Avatar name={session.name} email={session.email} size={64} />
+        <span className="invite-name">{session.name}</span>
+        <span className="muted">@{username}</span>
+      </div>
+      <div className="invite-qr">
+        <QrCode value={url} size={208} label={`QR code for ${url}`} />
+      </div>
+      <p className="muted invite-scan">Scan to add me on {brand.name}</p>
+      <div className="invite-link-row">
+        <span className="invite-link" title={url}>
+          <span>{url.replace(/^https?:\/\//, '')}</span>
+        </span>
+        <button type="button" className={`btn invite-copy${copied ? ' is-copied' : ''}`} onClick={() => void copy()}>
+          <Icon name={copied ? 'check' : 'clipboard'} size={18} />
+          <span role="status">{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
+      <button type="button" className="btn btn-primary btn-block invite-share" onClick={() => void share()}>
+        <Icon name="share" size={20} /> Share link
+      </button>
+    </div>
   );
 }
 

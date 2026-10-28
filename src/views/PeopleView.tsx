@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { brand } from '../branding/brand.config';
 import { type PresenceUser } from '../calls/protocol';
 import type { Peer } from '../calls/types';
@@ -18,6 +18,8 @@ export function PeopleView({
   contactsLoaded,
   onCall,
   onMessage,
+  lookup,
+  onLookupDone,
 }: {
   me: { email: string };
   presence: PresenceUser[];
@@ -26,6 +28,9 @@ export function PeopleView({
   contactsLoaded: boolean;
   onCall: (p: Peer, video: boolean) => void;
   onMessage: (p: Peer) => void;
+  /** A @username from an invite link, to look up straight away. */
+  lookup?: string | null;
+  onLookupDone?: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -46,14 +51,12 @@ export function PeopleView({
   const shown = contacts.filter((c) => (filter === 'all' || statusOf(c.id) !== 'offline') && matchesQuery(c, query));
   const typed = query.trim().replace(/^@+/, '');
 
-  const search = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!typed) return setSearchError('Type their @username (or email).');
+  const find = async (q: string) => {
     setSearching(true);
     setSearchError(null);
     setFound(null);
     try {
-      const person = await findPerson(query);
+      const person = await findPerson(q);
       if (!person) setSearchError(`No one on ${brand.name} has that username. Check the spelling.`);
       else if (person.email === me.email) setSearchError('That’s you.');
       else setFound(person);
@@ -63,6 +66,23 @@ export function PeopleView({
       setSearching(false);
     }
   };
+
+  const search = (e: FormEvent) => {
+    e.preventDefault();
+    if (!typed) return setSearchError('Type their @username (or email).');
+    void find(query);
+  };
+
+  // An invite link: show that person, ready to add.
+  useEffect(() => {
+    if (!lookup) return;
+    setQuery(`@${lookup}`);
+    setFilter('all');
+    void find(lookup);
+    onLookupDone?.();
+    // find only reads state it sets itself; run once per link.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lookup]);
 
   const typing = (value: string) => {
     setQuery(value);

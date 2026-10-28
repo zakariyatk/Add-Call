@@ -1347,6 +1347,92 @@ video {
   outline: 2px solid var(--text);
   outline-offset: 2px;
 }
+.invite-page {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 8px 0 24px;
+  text-align: center;
+  min-width: 0;
+  width: 100%;
+}
+.invite-who {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+.invite-name {
+  margin-top: 8px;
+  font-size: 20px;
+  font-weight: 700;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* White behind the code in dark mode too, so cameras can read it. */
+.invite-qr {
+  padding: 14px;
+  border-radius: 24px;
+  background: #fff;
+  border: 1px solid var(--border);
+  line-height: 0;
+}
+.qr-code {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.invite-scan {
+  margin: 0;
+}
+/* The link shortens with … rather than spilling out; Copy keeps its size. */
+.invite-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+}
+.invite-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 14px;
+  border-radius: 14px;
+  background: var(--surface-muted);
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+  user-select: all;
+}
+.invite-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.invite-copy {
+  flex: none;
+  min-height: var(--tap);
+  gap: 6px;
+  background: var(--surface);
+  border-color: var(--border);
+}
+.invite-copy.is-copied {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.invite-share {
+  gap: 8px;
+  margin-top: 4px;
+}
 .invite-card-text {
   flex: 1;
   min-width: 0;
