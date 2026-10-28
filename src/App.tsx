@@ -27,11 +27,35 @@ import { resetAvatars } from './profile/avatars';
 import { findPerson, loadMyProfile } from './profile/username';
 import { useBlocks } from './people/blocks';
 import { useContacts } from './people/contacts';
+import { usernameFromPath } from './people/inviteLink';
 import { isEmail } from './calls/protocol';
 import { ChooseUsernameScreen } from './views/ChooseUsernameScreen';
 
 const store = browserStore();
 const seenKey = (email: string) => storageKey(`recentsSeen.${email}`);
+const lookupKey = storageKey('inviteLookup');
+
+/**
+ * An invite link (/@username) opened: remember whose, through sign-in, and
+ * show the app at its usual address (#/people, where they're looked up).
+ */
+function takeInviteLink(): string | null {
+  const username = usernameFromPath(window.location.pathname);
+  if (username) {
+    try {
+      sessionStorage.setItem(lookupKey, username);
+    } catch {
+      /* the lookup then only lasts this page load */
+    }
+    window.history.replaceState(null, '', `/#/people`);
+    return username;
+  }
+  try {
+    return sessionStorage.getItem(lookupKey);
+  } catch {
+    return null;
+  }
+}
 
 const CHAT_ROUTE = /^chats\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
@@ -54,6 +78,8 @@ export default function App() {
   const [authError] = useState(takeAuthError);
   const [verifyToken, setVerifyToken] = useState(takeVerifyToken);
   const [settings, setSettings] = useState<Settings>(() => loadSettings(store));
+  // Before the route: an invite link becomes #/people first.
+  const [inviteLookup, setInviteLookup] = useState(takeInviteLink);
   const [route, setRoute] = useState(routeFromHash);
   const { view, chatId, settingsPage } = route;
   const [history, setHistory] = useState<CallRecord[]>([]);
@@ -373,6 +399,15 @@ export default function App() {
             contactsLoaded={contacts.loaded}
             onCall={startCall}
             onMessage={(p) => void startChat(p.email)}
+            lookup={inviteLookup}
+            onLookupDone={() => {
+              try {
+                sessionStorage.removeItem(lookupKey);
+              } catch {
+                /* nothing stored */
+              }
+              setInviteLookup(null);
+            }}
           />
         )}
         {view === 'settings' && (

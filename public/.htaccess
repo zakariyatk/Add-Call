@@ -10,6 +10,10 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 RewriteRule ^privacy/?$ privacy.html [L]
 RewriteRule ^delete-account/?$ delete-account.html [L]
 
+# Personal invite links (call.adddots.com/@username) open the app, which looks
+# the person up in People.
+RewriteRule ^@[A-Za-z0-9._]+/?$ index.html [L]
+
 <IfModule mod_headers.c>
   Header always set Strict-Transport-Security "max-age=31536000"
   Header always set X-Content-Type-Options "nosniff"

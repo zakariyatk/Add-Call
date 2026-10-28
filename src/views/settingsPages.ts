@@ -1,4 +1,4 @@
-const PAGES = ['profile', 'appearance', 'calling', 'notifications', 'blocked', 'about', 'delete'] as const;
+const PAGES = ['invite', 'profile', 'appearance', 'calling', 'notifications', 'blocked', 'about', 'delete'] as const;
 
 /** The pages Settings opens into (#/settings/<page>). */
 export type SettingsPage = (typeof PAGES)[number];
