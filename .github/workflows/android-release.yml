@@ -126,8 +126,13 @@ jobs:
           releaseFiles: release/*.aab
           releaseName: ${{ inputs.version_name }} (${{ github.run_number }})
           track: ${{ env.PLAY_TRACK }}
-          status: completed
+          # Google's API only allows draft releases while the app itself is still
+          # in Draft status (its Play Console setup checklist isn't fully done
+          # yet). Switch this back to "completed" once the app leaves Draft, so
+          # uploads go straight to the chosen track instead of needing a manual
+          # review/rollout in Play Console each time.
+          status: draft
 
       - name: Say where it went
         if: env.PLAY_TRACK != ''
-        run: echo "Uploaded to Google Play → ${{ inputs.track }}" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "Uploaded to Google Play → ${{ inputs.track }} (as a draft release — review and roll it out in Play Console)" >> "$GITHUB_STEP_SUMMARY"
