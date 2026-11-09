@@ -9,6 +9,7 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 # The privacy policy and account deletion page, linked from the app stores.
 RewriteRule ^privacy/?$ privacy.html [L]
 RewriteRule ^delete-account/?$ delete-account.html [L]
+RewriteRule ^child-safety/?$ child-safety.html [L]
 
 # Personal invite links (call.adddots.com/@username) open the app, which looks
 # the person up in People.

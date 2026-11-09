@@ -1,6 +1,6 @@
 import type { Plugin } from 'vite';
 import { brand, type BrandConfig } from './src/branding/brand.config';
-import { deleteAccountPage, privacyPage } from './src/branding/legal';
+import { childSafetyPage, deleteAccountPage, privacyPage } from './src/branding/legal';
 import { logoSvg } from './src/branding/logo';
 import { themeCss } from './src/branding/theme';
 
@@ -67,6 +67,7 @@ export function generatedFiles(b: BrandConfig): Record<string, { body: string; t
     'manifest.webmanifest': { body: JSON.stringify(manifest(b), null, 2), type: 'application/manifest+json' },
     'privacy.html': { body: privacyPage(b), type: 'text/html; charset=utf-8' },
     'delete-account.html': { body: deleteAccountPage(b), type: 'text/html; charset=utf-8' },
+    'child-safety.html': { body: childSafetyPage(b), type: 'text/html; charset=utf-8' },
   };
 }
 
@@ -80,7 +81,7 @@ export function brandPlugin(b: BrandConfig = brand): Plugin {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const path = (req.url ?? '').split('?')[0].replace(/^\//, '').replace(/\/$/, '');
-        // /privacy and /delete-account, as on the live site (see public/.htaccess).
+        // /privacy, /delete-account and /child-safety, as on the live site (see public/.htaccess).
         const files = generatedFiles(b);
         const file = files[path] ?? files[`${path}.html`];
         if (!file) return next();

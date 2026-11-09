@@ -1,19 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { generatedFiles } from '../../vite.brand';
 import { brand } from './brand.config';
-import { deleteAccountPage, privacyPage } from './legal';
+import { childSafetyPage, deleteAccountPage, privacyPage } from './legal';
 
 describe('privacy policy and account deletion pages', () => {
   it('are built with the site', () => {
     const files = generatedFiles(brand);
     expect(files['privacy.html'].body).toBe(privacyPage(brand));
     expect(files['delete-account.html'].body).toBe(deleteAccountPage(brand));
+    expect(files['child-safety.html'].body).toBe(childSafetyPage(brand));
     expect(files['privacy.html'].type).toMatch(/^text\/html/);
   });
 
   it.each([
     ['privacy', privacyPage],
     ['delete-account', deleteAccountPage],
+    ['child-safety', childSafetyPage],
   ] as const)('%s names the product and a way to reach us', (_, render) => {
     const html = render(brand);
     expect(html).toMatch(/^<!doctype html>/);
@@ -21,6 +23,12 @@ describe('privacy policy and account deletion pages', () => {
     expect(html).toContain(`mailto:${brand.supportEmail}`);
     expect(html).toContain('href="/privacy"');
     expect(html).toContain('href="/delete-account"');
+  });
+
+  it('states standards against CSAE and how to report it', () => {
+    const html = childSafetyPage(brand);
+    expect(html).toContain('child sexual abuse');
+    expect(html).toContain('Report');
   });
 
   it('says how to delete an account in the app, and the last update', () => {

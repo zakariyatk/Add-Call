@@ -2,10 +2,10 @@ import type { BrandConfig } from './brand.config';
 import { themeCss } from './theme';
 
 /*
- * The privacy policy (/privacy) and account deletion page (/delete-account):
- * plain pages outside the React app, so they open quickly from the app
- * stores' listings and from inside the apps. Generated from the branding
- * config at build time (see vite.brand.ts).
+ * The privacy policy (/privacy), account deletion page (/delete-account) and
+ * child safety standards (/child-safety): plain pages outside the React app,
+ * so they open quickly from the app stores' listings and from inside the
+ * apps. Generated from the branding config at build time (see vite.brand.ts).
  *
  * Keep them true: when the app starts collecting or sharing something new,
  * update the text here and `privacyUpdated` in the config.
@@ -51,7 +51,7 @@ function page(b: BrandConfig, title: string, description: string, body: string):
       ${body}
       <footer>
         <a href="/privacy">Privacy policy</a> · <a href="/delete-account">Delete your account</a> ·
-        <a href="mailto:${esc(b.supportEmail)}">${esc(b.supportEmail)}</a>
+        <a href="/child-safety">Child safety standards</a> · <a href="mailto:${esc(b.supportEmail)}">${esc(b.supportEmail)}</a>
       </footer>
     </main>
   </body>
@@ -144,6 +144,39 @@ export function privacyPage(b: BrandConfig): string {
 
       <h2>Contact</h2>
       <p>Questions or requests about your privacy: ${mail}.</p>`,
+  );
+}
+
+export function childSafetyPage(b: BrandConfig): string {
+  const n = esc(b.name);
+  const mail = `<a href="mailto:${esc(b.supportEmail)}">${esc(b.supportEmail)}</a>`;
+  return page(
+    b,
+    'Child safety standards',
+    `${b.name}'s standards against child sexual abuse and exploitation (CSAE).`,
+    `<h1>Child safety standards</h1>
+      <p class="muted">Last updated ${longDate(b.privacyUpdated)}</p>
+      <p>${n} has zero tolerance for child sexual abuse and exploitation (CSAE). This applies to everyone on ${n}, in every
+        country, across messages, photos, files, voice messages and calls.</p>
+
+      <h2>What is not allowed</h2>
+      <p>You may not use ${n} to create, send, request, store or share child sexual abuse material (CSAM), to groom, sexualise
+        or otherwise endanger a child, or to contact a child for a sexual purpose. This includes real, drawn, AI-generated or
+        otherwise edited content.</p>
+
+      <h2>How to report</h2>
+      <p>Anyone can report a person, message or call from inside ${n}: open their profile or chat and choose
+        <strong>Report</strong>, or block them from <strong>Settings → Blocked</strong>. You can also write to us directly at
+        ${mail} with as much detail as you can (the person's @username, screenshots and when it happened), whether or not you
+        have an account.</p>
+
+      <h2>What we do</h2>
+      <p>We review every report. Accounts and content that violate this policy are removed, and the account is banned from
+        ${n}. Where the law requires it, we report child sexual abuse material and the account details we have to the
+        relevant authorities, such as the National Center for Missing &amp; Exploited Children (NCMEC) in the United States.</p>
+
+      <h2>Contact</h2>
+      <p>Child safety reports and questions about this policy: ${mail}.</p>`,
   );
 }
 
